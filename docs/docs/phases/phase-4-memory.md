@@ -6,7 +6,7 @@ title: Phase 4 — Memory
 # Phase 4 — Memory
 
 **Status:** Implemented
-**Spec location:** `openspec/changes/archive/2026-08-19-phase-4-memory/`
+**Spec location:** `openspec/changes/archive/2026-08-18-phase-4-memory/`
 
 Phase 4 is build plan Part 6: the full `assembleContext` function, per-chapter memory generation, vector retrieval, per-universe context policy, and long-story arc compaction. Phase 1's `assembleContext` was written with the signature this phase keeps — nothing here touches a caller's shape, only what it's handed.
 
