@@ -1,0 +1,1031 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.15"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  public: {
+    Tables: {
+      api_keys: {
+        Row: {
+          created_at: string
+          encrypted_key: string
+          id: string
+          label: string | null
+          owner_id: string
+          provider: string
+          scope: string
+          story_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          encrypted_key: string
+          id?: string
+          label?: string | null
+          owner_id: string
+          provider?: string
+          scope: string
+          story_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          encrypted_key?: string
+          id?: string
+          label?: string | null
+          owner_id?: string
+          provider?: string
+          scope?: string
+          story_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_keys_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chapters: {
+        Row: {
+          created_at: string
+          entity_ids: string[]
+          extracted_diffs: Json | null
+          extraction_status: string
+          id: string
+          image_prompts: Json | null
+          prose: string
+          published_at: string
+          rolled_back_at: string | null
+          story_id: string
+          summary: string | null
+          turn_id: string | null
+          turn_mode: string
+          turn_number: number
+          validation_report: Json | null
+        }
+        Insert: {
+          created_at?: string
+          entity_ids?: string[]
+          extracted_diffs?: Json | null
+          extraction_status?: string
+          id?: string
+          image_prompts?: Json | null
+          prose: string
+          published_at?: string
+          rolled_back_at?: string | null
+          story_id: string
+          summary?: string | null
+          turn_id?: string | null
+          turn_mode: string
+          turn_number: number
+          validation_report?: Json | null
+        }
+        Update: {
+          created_at?: string
+          entity_ids?: string[]
+          extracted_diffs?: Json | null
+          extraction_status?: string
+          id?: string
+          image_prompts?: Json | null
+          prose?: string
+          published_at?: string
+          rolled_back_at?: string | null
+          story_id?: string
+          summary?: string | null
+          turn_id?: string | null
+          turn_mode?: string
+          turn_number?: number
+          validation_report?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chapters_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chapters_turn_id_fkey"
+            columns: ["turn_id"]
+            isOneToOne: false
+            referencedRelation: "turns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entities: {
+        Row: {
+          controlled_by: string | null
+          created_at: string
+          data: Json
+          id: string
+          name: string
+          status: string
+          story_id: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          controlled_by?: string | null
+          created_at?: string
+          data?: Json
+          id?: string
+          name: string
+          status?: string
+          story_id: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          controlled_by?: string | null
+          created_at?: string
+          data?: Json
+          id?: string
+          name?: string
+          status?: string
+          story_id?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entities_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entity_history: {
+        Row: {
+          applied_by: string | null
+          chapter_id: string | null
+          created_at: string
+          diff: Json
+          entity_id: string
+          id: string
+          is_reversal: boolean
+          story_id: string
+        }
+        Insert: {
+          applied_by?: string | null
+          chapter_id?: string | null
+          created_at?: string
+          diff: Json
+          entity_id: string
+          id?: string
+          is_reversal?: boolean
+          story_id: string
+        }
+        Update: {
+          applied_by?: string | null
+          chapter_id?: string | null
+          created_at?: string
+          diff?: Json
+          entity_id?: string
+          id?: string
+          is_reversal?: boolean
+          story_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_history_chapter_fk"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_history_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_history_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extraction_queue: {
+        Row: {
+          attempt_count: number
+          chapter_id: string
+          claimed_at: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          status: string
+          story_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          chapter_id: string
+          claimed_at?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          story_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          chapter_id?: string
+          claimed_at?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          story_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extraction_queue_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: true
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extraction_queue_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stories: {
+        Row: {
+          content_rating: string
+          created_at: string
+          current_turn: number
+          id: string
+          model_config: Json
+          owner_id: string
+          status: string
+          title: string
+          turn_config: Json
+          universe_id: string | null
+          universe_version: number | null
+          updated_at: string
+          world_ledger: Json
+        }
+        Insert: {
+          content_rating: string
+          created_at?: string
+          current_turn?: number
+          id?: string
+          model_config?: Json
+          owner_id: string
+          status?: string
+          title: string
+          turn_config?: Json
+          universe_id?: string | null
+          universe_version?: number | null
+          updated_at?: string
+          world_ledger?: Json
+        }
+        Update: {
+          content_rating?: string
+          created_at?: string
+          current_turn?: number
+          id?: string
+          model_config?: Json
+          owner_id?: string
+          status?: string
+          title?: string
+          turn_config?: Json
+          universe_id?: string | null
+          universe_version?: number | null
+          updated_at?: string
+          world_ledger?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stories_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stories_universe_version_fk"
+            columns: ["universe_id", "universe_version"]
+            isOneToOne: false
+            referencedRelation: "universe_versions"
+            referencedColumns: ["universe_id", "version"]
+          },
+        ]
+      }
+      story_members: {
+        Row: {
+          joined_at: string
+          role: string
+          story_id: string
+          user_id: string
+        }
+        Insert: {
+          joined_at?: string
+          role: string
+          story_id: string
+          user_id: string
+        }
+        Update: {
+          joined_at?: string
+          role?: string
+          story_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_members_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      submissions: {
+        Row: {
+          content: string
+          entity_id: string | null
+          id: string
+          proposals: Json | null
+          story_id: string
+          submitted_at: string
+          turn_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          entity_id?: string | null
+          id?: string
+          proposals?: Json | null
+          story_id: string
+          submitted_at?: string
+          turn_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          entity_id?: string | null
+          id?: string
+          proposals?: Json | null
+          story_id?: string
+          submitted_at?: string
+          turn_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submissions_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "submissions_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "submissions_turn_id_fkey"
+            columns: ["turn_id"]
+            isOneToOne: false
+            referencedRelation: "turns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      turns: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          deadline: string | null
+          failure_reason: string | null
+          id: string
+          mode: string
+          partial_prose: string | null
+          scene_setup: string | null
+          status: string
+          story_id: string
+          turn_number: number
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          deadline?: string | null
+          failure_reason?: string | null
+          id?: string
+          mode?: string
+          partial_prose?: string | null
+          scene_setup?: string | null
+          status?: string
+          story_id: string
+          turn_number: number
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          deadline?: string | null
+          failure_reason?: string | null
+          id?: string
+          mode?: string
+          partial_prose?: string | null
+          scene_setup?: string | null
+          status?: string
+          story_id?: string
+          turn_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "turns_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      universe_versions: {
+        Row: {
+          created_at: string
+          entity_schema: Json
+          id: string
+          progression_config: Json
+          progression_model: string
+          published_at: string
+          universe_id: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          entity_schema: Json
+          id?: string
+          progression_config?: Json
+          progression_model: string
+          published_at?: string
+          universe_id: string
+          version: number
+        }
+        Update: {
+          created_at?: string
+          entity_schema?: Json
+          id?: string
+          progression_config?: Json
+          progression_model?: string
+          published_at?: string
+          universe_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "universe_versions_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      universes: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
+      usage_log: {
+        Row: {
+          completion_tokens: number
+          cost_usd: number
+          created_at: string
+          id: string
+          model: string
+          prompt_tokens: number
+          role: string
+          story_id: string | null
+          succeeded: boolean
+          used_fallback_model: boolean
+          user_id: string | null
+        }
+        Insert: {
+          completion_tokens?: number
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          model: string
+          prompt_tokens?: number
+          role: string
+          story_id?: string | null
+          succeeded?: boolean
+          used_fallback_model?: boolean
+          user_id?: string | null
+        }
+        Update: {
+          completion_tokens?: number
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          model?: string
+          prompt_tokens?: number
+          role?: string
+          story_id?: string | null
+          succeeded?: boolean
+          used_fallback_model?: boolean
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_log_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      apply_entity_update: {
+        Args: {
+          p_applied_by?: string
+          p_chapter_id?: string
+          p_data: Json
+          p_diff: Json
+          p_entity_id: string
+          p_is_reversal?: boolean
+        }
+        Returns: {
+          controlled_by: string | null
+          created_at: string
+          data: Json
+          id: string
+          name: string
+          status: string
+          story_id: string
+          type: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "entities"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      claim_extraction_job: {
+        Args: { stale_after?: string }
+        Returns: {
+          attempt_count: number
+          chapter_id: string
+          claimed_at: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          status: string
+          story_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "extraction_queue"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_entity_with_history: {
+        Args: {
+          p_controlled_by?: string
+          p_created_by: string
+          p_data: Json
+          p_name: string
+          p_story_id: string
+          p_type: string
+        }
+        Returns: {
+          controlled_by: string | null
+          created_at: string
+          data: Json
+          id: string
+          name: string
+          status: string
+          story_id: string
+          type: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "entities"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_story:
+        | {
+            Args: {
+              p_content_rating: string
+              p_model_config: Json
+              p_owner_id: string
+              p_title: string
+              p_turn_config?: Json
+            }
+            Returns: {
+              content_rating: string
+              created_at: string
+              current_turn: number
+              id: string
+              model_config: Json
+              owner_id: string
+              status: string
+              title: string
+              turn_config: Json
+              universe_id: string | null
+              universe_version: number | null
+              updated_at: string
+              world_ledger: Json
+            }
+            SetofOptions: {
+              from: "*"
+              to: "stories"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              p_content_rating: string
+              p_model_config: Json
+              p_owner_id: string
+              p_title: string
+              p_turn_config?: Json
+              p_universe_id?: string
+              p_universe_version?: number
+            }
+            Returns: {
+              content_rating: string
+              created_at: string
+              current_turn: number
+              id: string
+              model_config: Json
+              owner_id: string
+              status: string
+              title: string
+              turn_config: Json
+              universe_id: string | null
+              universe_version: number | null
+              updated_at: string
+              world_ledger: Json
+            }
+            SetofOptions: {
+              from: "*"
+              to: "stories"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+      create_universe_with_version: {
+        Args: {
+          p_entity_schema: Json
+          p_name: string
+          p_owner_id: string
+          p_progression_config?: Json
+          p_progression_model: string
+        }
+        Returns: {
+          created_at: string
+          entity_schema: Json
+          id: string
+          progression_config: Json
+          progression_model: string
+          published_at: string
+          universe_id: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "universe_versions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      is_story_member: { Args: { target_story_id: string }; Returns: boolean }
+      is_story_owner: { Args: { target_story_id: string }; Returns: boolean }
+      open_turn: {
+        Args: { p_mode?: string; p_scene_setup?: string; p_story_id: string }
+        Returns: {
+          attempt_count: number
+          created_at: string
+          deadline: string | null
+          failure_reason: string | null
+          id: string
+          mode: string
+          partial_prose: string | null
+          scene_setup: string | null
+          status: string
+          story_id: string
+          turn_number: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "turns"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      publish_chapter: {
+        Args: { p_entity_ids?: string[]; p_prose: string; p_turn_id: string }
+        Returns: {
+          created_at: string
+          entity_ids: string[]
+          extracted_diffs: Json | null
+          extraction_status: string
+          id: string
+          image_prompts: Json | null
+          prose: string
+          published_at: string
+          rolled_back_at: string | null
+          story_id: string
+          summary: string | null
+          turn_id: string | null
+          turn_mode: string
+          turn_number: number
+          validation_report: Json | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chapters"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      publish_universe_version: {
+        Args: {
+          p_entity_schema: Json
+          p_owner_id: string
+          p_progression_config?: Json
+          p_progression_model: string
+          p_universe_id: string
+        }
+        Returns: {
+          created_at: string
+          entity_schema: Json
+          id: string
+          progression_config: Json
+          progression_model: string
+          published_at: string
+          universe_id: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "universe_versions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      rollback_chapter: {
+        Args: { p_chapter_id: string; p_user_id: string }
+        Returns: {
+          entity_history_id: string
+          entity_id: string
+          field: string
+          outcome: string
+        }[]
+      }
+      upgrade_story_universe_version: {
+        Args: {
+          p_owner_id: string
+          p_story_id: string
+          p_universe_version: number
+        }
+        Returns: {
+          content_rating: string
+          created_at: string
+          current_turn: number
+          id: string
+          model_config: Json
+          owner_id: string
+          status: string
+          title: string
+          turn_config: Json
+          universe_id: string | null
+          universe_version: number | null
+          updated_at: string
+          world_ledger: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "stories"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const

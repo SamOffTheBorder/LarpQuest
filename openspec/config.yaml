@@ -1,0 +1,59 @@
+schema: spec-driven
+
+context: |
+  Project: StoryForge (repo name: LarpQuest) — a universe-agnostic, multiplayer,
+  AI-driven collaborative fiction engine.
+
+  The authoritative implementation spec is STORYFORGE_BUILD_PLAN.md at the repo
+  root. Read it before proposing any change. Its Part 0 thesis constrains every
+  design decision:
+    1. Prose is disposable, state is permanent. Chapters render from a structured
+       DB; the DB is the source of truth, never the prose.
+    2. The engine knows nothing about any specific fiction. No hardcoded concept
+       of power level, magic, combat, or abilities. Universes define their own
+       vocabulary via schema. Zero genre conditionals in engine code.
+    3. Research before writing. A Canon Bible is produced by an 8-stage research
+       pipeline and corrected by humans before a story runs.
+
+  Repo layout:
+    apps/web/   Next.js 15 App Router, TypeScript strict, Tailwind, shadcn/ui
+    docs/       Docusaurus 3 (TypeScript) documentation site
+    openspec/   this spec-driven change workflow
+
+  Tech stack: Next.js (App Router) + TypeScript strict, Postgres via Supabase
+  (jsonb + pgvector), Supabase Auth + Realtime, Zod for every AI structured
+  output, OpenRouter as the AI gateway with a model assigned per role
+  (researcher, narrator, validator, extractor, summarizer, gatekeeper, embedder),
+  Inngest/Trigger.dev for durable jobs, Vercel hosting.
+
+  Build order is fixed — see Part 10. Do not reorder phases:
+    1 Generic Core -> 2 Universe System -> 3 Research Pipeline -> 4 Memory
+    -> 5 Multiplayer -> 6 Validation & Gatekeeping -> 7 Turn Modes -> 8 Polish
+
+  Non-obvious requirements that must never be deferred (Part 11):
+    - Universe versioning from Phase 2; stories pin a universe version.
+    - Entity history from Phase 1; every state change is a row, so rollback works.
+    - Submissions persist independently of generation attempts.
+    - Cost visibility from day one.
+    - GM overrides write a canon exception so the same thing never re-flags.
+    - Tone rules matter as much as mechanical rules; genre drift is a bug.
+    - Research gaps must be visible to users.
+    - Never block publication on state extraction. Publish, then extract.
+
+rules:
+  proposal:
+    - State which build-plan phase (Part 10) the change belongs to, and do not
+      propose work from a later phase before earlier phases are complete.
+    - Include a "Non-goals" section.
+    - Reject any design that requires a conditional branching on genre, universe,
+      or media type inside engine code.
+  design:
+    - Every AI model call must name its role from the Part 1.3 role table and be
+      parsed through a Zod schema.
+    - Any new persisted state must specify its RLS policy and how it is gated
+      through story_members.
+    - "Specify failure behavior explicitly: what happens on timeout, on invalid
+      model output, and on retry exhaustion."
+  tasks:
+    - Break tasks into chunks of at most 2 hours.
+    - Every task that adds a table or column includes its migration file.
