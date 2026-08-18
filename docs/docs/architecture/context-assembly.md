@@ -94,8 +94,14 @@ Beyond roughly 50 chapters, linear context growth becomes untenable. The system 
 
 This keeps assembled context roughly constant as a story grows, which is what allows a 100-chapter campaign to run on the same budget as a 20-chapter one.
 
-## Phase 1 form
+## What's implemented (Phase 4)
 
-Phase 1 implements this function with **no retrieval and no compression** — active entities, world ledger, tone, recent chapters, scene setup, submissions.
+Retrieval, canon compression, and arc compaction are implemented, exactly on the Phase 1 signature — no caller needed to change. `assembleContext` still performs no writes and no database reads; the caller (`buildTurnContext` in `turns.ts`) resolves the pinned universe version's `context_policy`, runs retrieval, and resolves compressed canon-bible text upstream, then hands `assembleContext` plain data to render. See [Memory & Context](/architecture/memory-and-context) for the generation, retrieval, and compaction mechanics behind what this function receives.
 
-Crucially, it uses the signature it will keep. [Phase 4](/phases/build-order#phase-4--memory) adds embeddings, retrieval, context policy, and arc compaction *inside* the function, without touching a single caller.
+One difference from the design sketch above: `RETRIEVED` biases the *summaries being ranked*, not the ranking function itself. `retrieval_bias` shapes the prompt used to generate a chapter or arc summary (see [Memory & Context](/architecture/memory-and-context#retrieval-bias-is-a-prompt-instruction-not-a-ranking-strategy)) — the similarity search itself is one code path, unconditional on genre, universe, or bias, per CLAUDE.md's non-negotiable #1.
+
+Gatekeeper rulings in `CURRENT` remain a Phase 6 addition — not present in the assembled prompt yet.
+
+## Phase 1 form (superseded)
+
+Phase 1 shipped this function with **no retrieval and no compression** — active entities, world ledger, tone, recent chapters, scene setup, submissions. It used the signature Phase 4 kept, which is why the sections above landed without touching a single existing caller.

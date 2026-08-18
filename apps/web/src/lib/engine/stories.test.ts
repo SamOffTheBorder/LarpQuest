@@ -16,6 +16,15 @@ const state = vi.hoisted(() => ({
 
 vi.mock('server-only', () => ({}));
 
+// universes.ts (imported transitively for the pinned-universe cases below)
+// now imports the AI gateway for canon-bible compression, which reads
+// serverEnv() and clientEnv at module scope — story persistence makes no
+// model call itself, so this only needs to satisfy the import.
+vi.mock('@/lib/env', () => ({
+  serverEnv: () => ({ OPENROUTER_API_KEY: 'test-key' }),
+  clientEnv: {},
+}));
+
 vi.mock('@/lib/supabase/server', () => {
   function from(table: string) {
     const builder = {

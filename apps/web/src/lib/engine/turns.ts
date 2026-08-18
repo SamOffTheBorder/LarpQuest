@@ -5,10 +5,18 @@ import { z } from 'zod';
 import { streamNarration } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
 import { createUsageRecorder } from '@/lib/ai/usage';
-import { assembleContext, type ContextChapter, type ContextEntity } from '@/lib/engine/context';
+import {
+  assembleContext,
+  DEFAULT_CONTEXT_POLICY as ENGINE_DEFAULT_CONTEXT_POLICY,
+  type ContextChapter,
+  type ContextEntity,
+  type ContextPolicy,
+} from '@/lib/engine/context';
 import { assertMember } from '@/lib/engine/membership';
 import { DEFAULT_TURN_MODE, resolveTurnMode } from '@/lib/engine/turn-modes';
 import { acceptsSubmissions, assertTransition, type TurnStatus } from '@/lib/engine/turn-state';
+import type { ContextPolicy as StoredContextPolicy } from '@/lib/memory/schemas';
+import { retrieveRelevantSummaries } from '@/lib/memory/retrieval';
 import { serverEnv } from '@/lib/env';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
@@ -380,6 +388,8 @@ interface StoryContextRow {
   world_ledger: unknown;
   model_config: unknown;
   turn_config: unknown;
+  universe_id: string | null;
+  universe_version: number | null;
 }
 
 /**
@@ -540,7 +550,7 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
   const [storyResult, entityResult, chapterResult, submissionResult] = await Promise.all([
     supabase
       .from('stories')
-      .select('title, world_ledger, model_config, turn_config')
+      .select('title, world_ledger, model_config, turn_config, universe_id, universe_version')
       .eq('id', turn.storyId)
       .single(),
     supabase
@@ -599,12 +609,31 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
   }));
 
   const toneDirectives = readToneDirectives(story.turn_config);
+  const modelConfig = (story.model_config ?? null) as ModelConfig | null;
+
+  const { contextPolicy, canonBibleText } = await resolveUniverseContext(
+    story.universe_id,
+    story.universe_version,
+  );
+
+  const queryText = submissions.map((submission) => submission.content).join('\n');
+  const retrievedSummaries =
+    queryText.length > 0 && (contextPolicy.retrievedChapters ?? 0) > 0
+      ? await retrieveRelevantSummaries({
+          storyId: turn.storyId,
+          queryText,
+          k: contextPolicy.retrievedChapters ?? 0,
+          modelConfig,
+          usage: createUsageRecorder(turn.storyId, null),
+        })
+      : [];
 
   const assembled = assembleContext({
     story: {
       title: story.title,
       toneDirectives,
       worldLedger: (story.world_ledger ?? {}) as Record<string, unknown>,
+      canonBibleText,
     },
     turn: {
       turnNumber: turn.turnNumber,
@@ -613,13 +642,15 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
     },
     entities,
     recentChapters,
+    retrievedSummaries,
     submissions,
+    policy: contextPolicy,
   });
 
   return {
     prompt: assembled.prompt,
     entityIds: entities.filter((entity) => entity.status === 'active').map((entity) => entity.id),
-    modelConfig: (story.model_config ?? null) as ModelConfig | null,
+    modelConfig,
   };
 }
 
@@ -632,4 +663,74 @@ function readToneDirectives(turnConfig: unknown): string | null {
   const value = (turnConfig as Record<string, unknown>).tone_directives;
 
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+interface UniverseContext {
+  contextPolicy: ContextPolicy;
+  canonBibleText: string | null;
+}
+
+/**
+ * Resolve the story's pinned universe version's context policy and
+ * compressed canon bible text. An unpinned story (no universe, or one
+ * created before Phase 2) gets the documented default policy and no canon
+ * bible — exactly Phase 1 behavior, per context-assembly spec's "Story
+ * without a pinned universe version uses default policy."
+ */
+async function resolveUniverseContext(
+  universeId: string | null | undefined,
+  universeVersion: number | null | undefined,
+): Promise<UniverseContext> {
+  if (universeId === null || universeId === undefined || universeVersion === null || universeVersion === undefined) {
+    return { contextPolicy: ENGINE_DEFAULT_CONTEXT_POLICY, canonBibleText: null };
+  }
+
+  const supabase = createServiceRoleClient();
+  const { data } = await supabase
+    .from('universe_versions')
+    .select('context_policy, canon_bible_summary, canon_bible_rules_only')
+    .eq('universe_id', universeId)
+    .eq('version', universeVersion)
+    .maybeSingle();
+
+  if (data === null) {
+    return { contextPolicy: ENGINE_DEFAULT_CONTEXT_POLICY, canonBibleText: null };
+  }
+
+  const stored = data.context_policy as StoredContextPolicy | null;
+  const contextPolicy: ContextPolicy = {
+    recentChapters: stored?.recent_chapters ?? ENGINE_DEFAULT_CONTEXT_POLICY.recentChapters,
+    tokenBudget: stored?.token_budget ?? ENGINE_DEFAULT_CONTEXT_POLICY.tokenBudget,
+    retrievedChapters: stored?.retrieved_chapters ?? 5,
+    retrievalBias: stored?.retrieval_bias ?? 'precedent',
+    canonCompression: stored?.canon_compression ?? 'full',
+  };
+
+  const canonBibleText = resolveCanonBibleText(
+    contextPolicy.canonCompression,
+    data.canon_bible_summary,
+    data.canon_bible_rules_only,
+  );
+
+  return { contextPolicy, canonBibleText };
+}
+
+/** No `full` variant is stored separately — `canon_compression: 'full'` means
+ * "no compression," which this module has no full canon bible to render from
+ * yet (see universes.ts's UniverseVersionInput.canonBible doc comment), so it
+ * resolves to null exactly like an unpinned story. */
+function resolveCanonBibleText(
+  canonCompression: string | undefined,
+  summary: unknown,
+  rulesOnly: unknown,
+): string | null {
+  if (canonCompression === 'summary' && summary !== null && summary !== undefined) {
+    return JSON.stringify(summary, null, 2);
+  }
+
+  if (canonCompression === 'rules_only' && rulesOnly !== null && rulesOnly !== undefined) {
+    return JSON.stringify(rulesOnly, null, 2);
+  }
+
+  return null;
 }

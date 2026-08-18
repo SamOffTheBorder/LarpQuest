@@ -5,6 +5,7 @@ import {
   ContextBudgetError,
   type AssembleContextInput,
   type ContextEntity,
+  type ContextRetrievedSummary,
 } from './context';
 
 function baseInput(overrides: Partial<AssembleContextInput> = {}): AssembleContextInput {
@@ -177,5 +178,99 @@ describe('assembleContext', () => {
   it('reports no active entities without failing', () => {
     const { prompt } = assembleContext(baseInput({ entities: [] }));
     expect(prompt).toContain('(no active entities)');
+  });
+});
+
+describe('assembleContext — Phase 4 retrieval and canon compression', () => {
+  const summary: ContextRetrievedSummary = {
+    turnNumber: 2,
+    summary: 'Aya first found the missing key in chapter 2.',
+    similarity: 0.91,
+  };
+
+  it('omitting retrievedSummaries and canonBibleText reproduces exact Phase 1 output', () => {
+    const withoutPhase4 = assembleContext(baseInput());
+    const explicitlyEmpty = assembleContext(baseInput({ retrievedSummaries: [] }));
+
+    expect(withoutPhase4.prompt).toBe(explicitlyEmpty.prompt);
+    expect(withoutPhase4.droppedRetrievedSummaries).toBe(0);
+  });
+
+  it('a provided retrieved summary appears in the assembled context', () => {
+    const { prompt } = assembleContext(baseInput({ retrievedSummaries: [summary] }));
+
+    expect(prompt).toContain('## Relevant History');
+    expect(prompt).toContain('Aya first found the missing key in chapter 2.');
+  });
+
+  it('a retrieved summary whose chapter is already in RECENT is not duplicated', () => {
+    const { prompt, droppedRetrievedSummaries } = assembleContext(
+      baseInput({
+        recentChapters: [{ turnNumber: 2, prose: 'Aya searched the desk and found a key.' }],
+        retrievedSummaries: [summary],
+      }),
+    );
+
+    // The chapter appears once, via RECENT (full prose), not duplicated in RETRIEVED.
+    expect(prompt).not.toContain('## Relevant History');
+    expect(prompt).toContain('Aya searched the desk and found a key.');
+    expect(droppedRetrievedSummaries).toBe(1);
+  });
+
+  it('is deterministic and side-effect-free with the new inputs', () => {
+    const input = baseInput({ retrievedSummaries: [summary], story: { ...baseInput().story, canonBibleText: 'Magic requires a cost.' } });
+    const snapshot = structuredClone(input);
+
+    const first = assembleContext(input);
+    const second = assembleContext(input);
+
+    expect(first.prompt).toBe(second.prompt);
+    expect(input).toEqual(snapshot);
+  });
+
+  it('includes the resolved canon bible text when provided', () => {
+    const { prompt } = assembleContext(
+      baseInput({ story: { ...baseInput().story, canonBibleText: 'Magic requires a cost.' } }),
+    );
+
+    expect(prompt).toContain('## Canon Bible');
+    expect(prompt).toContain('Magic requires a cost.');
+  });
+
+  it('omits the Canon Bible section when no canon bible text is provided', () => {
+    const { prompt } = assembleContext(baseInput());
+    expect(prompt).not.toContain('## Canon Bible');
+  });
+
+  it('drops the lowest-relevance retrieved summaries first when over budget', () => {
+    const long = 'x'.repeat(4_000);
+
+    const highRelevance: ContextRetrievedSummary = { turnNumber: 10, summary: `HIGH ${long}`, similarity: 0.95 };
+    const lowRelevance: ContextRetrievedSummary = { turnNumber: 11, summary: `LOW ${long}`, similarity: 0.4 };
+
+    const { prompt, droppedRetrievedSummaries } = assembleContext(
+      baseInput({
+        retrievedSummaries: [highRelevance, lowRelevance],
+        policy: { recentChapters: 3, tokenBudget: 1_500 },
+      }),
+    );
+
+    expect(prompt).toContain('HIGH');
+    expect(prompt).not.toContain('LOW');
+    expect(droppedRetrievedSummaries).toBe(1);
+  });
+
+  it('renders an arc-range summary distinctly from a single-chapter summary', () => {
+    const arcSummary: ContextRetrievedSummary = {
+      turnNumber: 61,
+      arcRange: { fromChapter: 50, toChapter: 61 },
+      summary: 'The expedition crossed the wastes.',
+      similarity: 0.8,
+    };
+
+    const { prompt } = assembleContext(baseInput({ retrievedSummaries: [arcSummary] }));
+
+    expect(prompt).toContain('Chapters 50-61');
+    expect(prompt).toContain('The expedition crossed the wastes.');
   });
 });

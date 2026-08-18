@@ -28,6 +28,14 @@ vi.mock('@/lib/ai/usage', () => ({
   createUsageRecorder: () => ({ record: async () => {} }),
 }));
 
+// Retrieval (Phase 4) is exercised in its own test file (retrieval.test.ts) —
+// here it only needs to not attempt a real embedding call, since this file's
+// invariant is about the turn loop's submission-persistence guarantee, not
+// retrieval ranking.
+vi.mock('@/lib/memory/retrieval', () => ({
+  retrieveRelevantSummaries: async () => [],
+}));
+
 vi.mock('@/lib/ai/gateway', () => ({
   streamNarration: async (
     _deps: unknown,

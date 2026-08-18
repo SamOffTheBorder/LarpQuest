@@ -15,6 +15,36 @@ const state = vi.hoisted(() => ({
 
 vi.mock('server-only', () => ({}));
 
+vi.mock('@/lib/env', () => ({
+  serverEnv: () => ({ OPENROUTER_API_KEY: 'test-key' }),
+  clientEnv: {},
+}));
+
+vi.mock('@/lib/ai/usage', () => ({
+  createUsageRecorder: () => ({ record: async () => {} }),
+  nullUsageRecorder: { record: async () => {} },
+}));
+
+vi.mock('@/lib/ai/gateway', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/ai/gateway')>('@/lib/ai/gateway');
+
+  return {
+    ...actual,
+    callStructured: async (
+      deps: { usage: { record: (entry: unknown) => Promise<void> } },
+      args: { role: string; systemPrompt: string },
+    ) => {
+      await deps.usage.record({ role: args.role, succeeded: true });
+
+      if (args.systemPrompt.includes('rules')) {
+        return { data: { rules: ['Magic requires a cost.'] }, resolvedModel: 'm', usedFallbackModel: false };
+      }
+
+      return { data: { summary: 'A condensed canon summary.' }, resolvedModel: 'm', usedFallbackModel: false };
+    },
+  };
+});
+
 vi.mock('@/lib/supabase/server', () => {
   function versionsForUniverse(universeId: string) {
     return [...state.versions.values()].filter((row) => row.universe_id === universeId);
@@ -92,6 +122,9 @@ vi.mock('@/lib/supabase/server', () => {
             entity_schema: args.p_entity_schema,
             progression_model: args.p_progression_model,
             progression_config: args.p_progression_config,
+            context_policy: args.p_context_policy,
+            canon_bible_summary: args.p_canon_bible_summary,
+            canon_bible_rules_only: args.p_canon_bible_rules_only,
             published_at: '2026-08-17T00:00:00Z',
           };
           state.versions.set(versionId, row);
@@ -119,6 +152,9 @@ vi.mock('@/lib/supabase/server', () => {
             entity_schema: args.p_entity_schema,
             progression_model: args.p_progression_model,
             progression_config: args.p_progression_config,
+            context_policy: args.p_context_policy,
+            canon_bible_summary: args.p_canon_bible_summary,
+            canon_bible_rules_only: args.p_canon_bible_rules_only,
             published_at: '2026-08-17T01:00:00Z',
           };
           state.versions.set(versionId, row);
@@ -240,5 +276,89 @@ describe('getLatestUniverseVersion', () => {
 
     const latest = await getLatestUniverseVersion(v1.universeId);
     expect(latest.version).toBe(2);
+  });
+});
+
+describe('context policy and canon compression (Phase 4)', () => {
+  it('a published version has both compressed canon-bible variants populated when canonBible is supplied', async () => {
+    const { createUniverse } = await import('@/lib/engine/universes');
+
+    const version = await createUniverse(
+      OWNER,
+      {
+        name: 'Ashfall Legion',
+        entitySchema: POWER_SCHEMA,
+        progressionModel: 'ability_unlock',
+        progressionConfig: {},
+        canonBible: { rules: [{ id: 'r1', text: 'Magic requires a cost.' }] },
+      },
+      { record: async () => {} },
+    );
+
+    expect(version.canonBibleSummary).toEqual({ summary: 'A condensed canon summary.' });
+    expect(version.canonBibleRulesOnly).toEqual({ rules: ['Magic requires a cost.'] });
+  });
+
+  it('omitting canonBible yields null compressed variants without calling the model', async () => {
+    const { createUniverse } = await import('@/lib/engine/universes');
+
+    const version = await createUniverse(OWNER, {
+      name: 'Ashfall Legion',
+      entitySchema: POWER_SCHEMA,
+      progressionModel: 'ability_unlock',
+      progressionConfig: {},
+    });
+
+    expect(version.canonBibleSummary).toBeNull();
+    expect(version.canonBibleRulesOnly).toBeNull();
+  });
+
+  it('omitting contextPolicy on input yields the documented defaults', async () => {
+    const { createUniverse } = await import('@/lib/engine/universes');
+    const { DEFAULT_CONTEXT_POLICY } = await import('@/lib/memory/schemas');
+
+    const version = await createUniverse(OWNER, {
+      name: 'Ashfall Legion',
+      entitySchema: POWER_SCHEMA,
+      progressionModel: 'ability_unlock',
+      progressionConfig: {},
+    });
+
+    expect(version.contextPolicy).toEqual(DEFAULT_CONTEXT_POLICY);
+  });
+
+  it("a version's context policy is independent of a later version's (pinning is preserved)", async () => {
+    const { createUniverse, publishUniverseVersion, getUniverseVersion } = await import(
+      '@/lib/engine/universes'
+    );
+
+    const v1 = await createUniverse(OWNER, {
+      name: 'Ashfall Legion',
+      entitySchema: POWER_SCHEMA,
+      progressionModel: 'ability_unlock',
+      progressionConfig: {},
+      contextPolicy: {
+        recent_chapters: 1,
+        retrieved_chapters: 0,
+        retrieval_bias: 'thematic',
+        canon_compression: 'rules_only',
+        token_budget: 10_000,
+      },
+    });
+
+    await publishUniverseVersion(v1.universeId, OWNER, {
+      name: 'Ashfall Legion',
+      entitySchema: POWER_SCHEMA,
+      progressionModel: 'ability_unlock',
+      progressionConfig: {},
+      // No contextPolicy supplied for v2 — defaults, independent of v1's.
+    });
+
+    const stillV1 = await getUniverseVersion(v1.universeId, 1);
+    expect(stillV1.contextPolicy.retrieval_bias).toBe('thematic');
+
+    const v2 = await getUniverseVersion(v1.universeId, 2);
+    const { DEFAULT_CONTEXT_POLICY } = await import('@/lib/memory/schemas');
+    expect(v2.contextPolicy).toEqual(DEFAULT_CONTEXT_POLICY);
   });
 });

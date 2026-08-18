@@ -235,6 +235,97 @@ export async function callStructured<T>(
   throw new StructuredOutputError(args.role, MAX_STRUCTURED_ATTEMPTS, lastRaw, lastError);
 }
 
+interface OpenRouterEmbeddingResponse {
+  data?: { embedding?: number[] }[];
+  usage?: OpenRouterUsage;
+}
+
+export class EmbeddingError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
+    this.name = 'EmbeddingError';
+  }
+}
+
+interface EmbedTextArgs {
+  modelConfig: ModelConfig | null | undefined;
+  text: string;
+  storyId: string | null;
+}
+
+/**
+ * Embed text through the `embedder` role. Unlike `callStructured`, there is no
+ * retry-with-error-appended loop — a malformed embedding response is not a
+ * validation failure a model can correct by trying again, it is a transport or
+ * provider problem, so this fails once and lets the caller (the memory
+ * worker) mark the job failed and retry the whole job later.
+ */
+export async function embedText(
+  deps: GatewayDeps,
+  args: EmbedTextArgs,
+): Promise<{ embedding: number[]; resolvedModel: string; usedFallbackModel: boolean }> {
+  const resolved = resolveModel('embedder', args.modelConfig);
+  const doFetch = deps.fetchImpl ?? fetch;
+
+  const response = await doFetch(`${OPENROUTER_BASE_URL}/embeddings`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${deps.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: resolved.model,
+      input: args.text,
+      usage: { include: true },
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    await deps.usage.record({
+      role: 'embedder',
+      model: resolved.model,
+      promptTokens: 0,
+      completionTokens: 0,
+      costUsd: 0,
+      succeeded: false,
+      usedFallbackModel: resolved.usedFallback,
+    });
+    throw new EmbeddingError(`OpenRouter embedding request failed (${response.status}): ${body}`);
+  }
+
+  const payload = (await response.json()) as OpenRouterEmbeddingResponse;
+  const embedding = payload.data?.[0]?.embedding;
+
+  const promptTokens = payload.usage?.prompt_tokens ?? 0;
+  const costUsd = payload.usage?.cost ?? 0;
+
+  if (embedding === undefined || embedding.length === 0) {
+    await deps.usage.record({
+      role: 'embedder',
+      model: resolved.model,
+      promptTokens,
+      completionTokens: 0,
+      costUsd,
+      succeeded: false,
+      usedFallbackModel: resolved.usedFallback,
+    });
+    throw new EmbeddingError('OpenRouter embedding response contained no vector.');
+  }
+
+  await deps.usage.record({
+    role: 'embedder',
+    model: resolved.model,
+    promptTokens,
+    completionTokens: 0,
+    costUsd,
+    succeeded: true,
+    usedFallbackModel: resolved.usedFallback,
+  });
+
+  return { embedding, resolvedModel: resolved.model, usedFallbackModel: resolved.usedFallback };
+}
+
 export interface StreamNarrationArgs {
   modelConfig: ModelConfig | null | undefined;
   systemPrompt: string;

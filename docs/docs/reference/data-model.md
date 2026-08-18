@@ -58,13 +58,16 @@ create table universe_versions (
   entity_schema jsonb not null,        -- Phase 2: hand-authored; Stage 6 output from Phase 3 on
   progression_model text not null,     -- single slug, Phase 2's dispatch table
   progression_config jsonb not null default '{}',
+  context_policy jsonb not null default '{...}',      -- Phase 4, defaulted
+  canon_bible_summary jsonb,                            -- Phase 4, nullable
+  canon_bible_rules_only jsonb,                         -- Phase 4, nullable
   published_at timestamptz default now(),
   created_at timestamptz default now(),
   unique (universe_id, version)
 );
 ```
 
-No `classification`, `canon_bible`, `validation_rules`, `context_policy`, `turn_modes`, `research_gaps`, or `is_public` yet — those arrive with the phases that produce or consume them. `progression_model` is singular (Phase 2 registers `none` and `ability_unlock`; a universe picks one), not the `progression_models text[]` the future shape anticipates for universes composing several. See [Universe Versioning](/architecture/universe-versioning) for why versions are separate immutable rows.
+No `classification`, `canon_bible` (the full, uncompressed jsonb the future shape sketches), `validation_rules`, `turn_modes`, `research_gaps`, or `is_public` yet — those arrive with the phases that produce or consume them. `progression_model` is singular (Phase 2 registers `none` and `ability_unlock`; a universe picks one), not the `progression_models text[]` the future shape anticipates for universes composing several. `context_policy` and the two compressed canon-bible columns arrived in Phase 4 — see [Memory & Context](/architecture/memory-and-context#context-policy) — generated synchronously at publish, from an optional `canonBible` input that `research/publish.ts` does not yet supply (research-created universes currently publish with null compressed variants; wiring the draft's rules/entities/timeline/rule-pack sections into that input is unscoped work, not a Phase 4 gap). See [Universe Versioning](/architecture/universe-versioning) for why versions are separate immutable rows.
 
 ## Research drafts
 
@@ -174,24 +177,40 @@ create table chapters (
   turn_mode text not null,
   prose text not null,
   summary text,
-  embedding vector(1536),
+  embedding vector(1536),           -- Phase 4
   entity_ids uuid[],
   extracted_diffs jsonb,
-  validation_report jsonb,
-  image_prompts jsonb,
+  validation_report jsonb,          -- Phase 6
+  image_prompts jsonb,              -- Phase 8
+  extraction_status text not null default 'pending',  -- Phase 1
+  memory_status text not null default 'pending',       -- Phase 4
   created_at timestamptz default now()
 );
 
-create table arc_summaries (
+create table arc_summaries (       -- Phase 4
   id uuid primary key default gen_random_uuid(),
   story_id uuid references stories(id) on delete cascade,
-  from_chapter int, to_chapter int,
+  from_chapter int not null, to_chapter int not null,
   summary text not null,
-  embedding vector(1536)
+  embedding vector(1536),
+  created_at timestamptz default now()
+);
+
+create table memory_queue (        -- Phase 4
+  id uuid primary key default gen_random_uuid(),
+  chapter_id uuid references chapters(id) on delete cascade,
+  story_id uuid references stories(id) on delete cascade,
+  status text not null default 'queued',  -- queued|claimed|complete|failed
+  attempt_count int not null default 0,
+  claimed_at timestamptz,
+  last_error text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (chapter_id)
 );
 ```
 
-`embedding` is on the **summary**, not the prose — a summary embeds what the chapter was about, while prose embeds incidental vocabulary. `arc_summaries` implements [long-story compaction](/architecture/context-assembly#long-story-compaction).
+`embedding` is on the **summary**, not the prose — a summary embeds what the chapter was about, while prose embeds incidental vocabulary. `arc_summaries` implements [long-story compaction](/architecture/memory-and-context#arc-compaction). `memory_queue` mirrors `extraction_queue`'s shape exactly (own table, not a job-type column on the existing one) since summary/embedding generation and diff extraction are independent failure domains — see [Memory & Context](/architecture/memory-and-context#per-chapter-memory-generation).
 
 ## Turns
 
@@ -288,12 +307,13 @@ Phase 2 added: `universes`, `universe_versions`, and nullable `stories.universe_
 
 Phase 3 added: `universe_drafts`, `research_jobs`, and the `start_research_job` RPC. No existing table changed.
 
+Phase 4 added: the `vector` extension (in a dedicated `extensions` schema, not `public`), `chapters.embedding`/`memory_status`, `arc_summaries`, `memory_queue`, `universe_versions.context_policy`/`canon_bible_summary`/`canon_bible_rules_only`. New RPCs: `claim_memory_job`, `match_chapter_summaries`, `match_arc_summaries`. `create_universe_with_version` and `publish_universe_version` gained new parameters — this required dropping and recreating both functions, since `create or replace` cannot change a parameter list.
+
 Still deferred, so later migrations are explicit about introducing them:
 
 | Object | Arrives in |
 |---|---|
-| `chapters.embedding`, `arc_summaries`, `vector` extension | Phase 4 |
-| `proposals`, `canon_exceptions` | Phase 6 |
-| `universes.is_public`, `forked_from` (marketplace) | Phase 8 |
+| `proposals`, `canon_exceptions`, `validation_report` (populated) | Phase 6 |
+| `universes.is_public`, `forked_from` (marketplace), `image_prompts` (populated) | Phase 8 |
 
-Phase 1 adds one table not in the original plan — `extraction_queue`, with a claim timestamp and attempt count — because extraction runs after publication and needs stale-claim recovery. Phase 3 introduces Inngest for the research pipeline's genuinely multi-step orchestration, but does **not** migrate `extraction_queue` onto it — that queue's one-shot retryable job has no orchestration need Inngest would improve on, so it keeps its existing claim/update shape.
+Phase 1 adds one table not in the original plan — `extraction_queue`, with a claim timestamp and attempt count — because extraction runs after publication and needs stale-claim recovery. Phase 3 introduces Inngest for the research pipeline's genuinely multi-step orchestration, but does **not** migrate `extraction_queue` onto it — that queue's one-shot retryable job has no orchestration need Inngest would improve on, so it keeps its existing claim/update shape. Phase 4 follows the same precedent for `memory_queue`: a new independent job kind gets its own table, not a type column on `extraction_queue`.

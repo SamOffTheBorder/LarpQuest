@@ -14,7 +14,7 @@ Each phase depends on the last. The ordering is not a preference — it is a dep
 | [1](/phases/phase-1-generic-core) | Generic Core | ~3 weeks |
 | [2](/phases/phase-2-universe-system) | Universe System | ~3 weeks |
 | [3](/phases/phase-3-research-pipeline) | Research Pipeline | ~3 weeks |
-| 4 | Memory | ~2 weeks |
+| [4](/phases/phase-4-memory) | Memory | ~2 weeks |
 | 5 | Multiplayer | ~3 weeks |
 | 6 | Validation & Gatekeeping | ~2 weeks |
 | 7 | Turn Modes | ~2 weeks |
@@ -67,9 +67,11 @@ Each stage is a discrete, individually retryable sub-job writing to a shared dra
 
 ## Phase 4 — Memory
 
-Summarization, embeddings, vector retrieval, context policy, arc compaction, the full [`assembleContext`](/architecture/context-assembly) function.
+**Status: implemented.** Summarization, embeddings, vector retrieval, context policy, arc compaction, the full [`assembleContext`](/architecture/context-assembly) function.
 
 **Exit criteria:** A 30-chapter story maintains continuity on details established in chapter 3.
+
+→ [Full Phase 4 specification](/phases/phase-4-memory)
 
 ## Phase 5 — Multiplayer
 
@@ -112,7 +114,7 @@ If any launch template required a special case before this point, **fix the abst
 
 ## Phase 8 — Polish
 
-Image prompt generation as a first-class per-chapter feature. Full-text search across a story. Export to Markdown/PDF/EPUB. Public read-only share links. Mobile-responsive pass. Universe marketplace — browse, clone, fork published universes.
+Image prompt generation as a first-class per-chapter feature. Full-text search across a story. Export to Markdown/PDF/EPUB. Public read-only share links. Mobile-responsive pass. Universe marketplace — browse, clone, fork published universes. UI design pass — real visual design (not just Tailwind/shadcn defaults) across the turn loop, entity sheets, universe review UI, and story dashboard, once every phase's surface area exists to design against.
 
 ## Non-obvious requirements
 

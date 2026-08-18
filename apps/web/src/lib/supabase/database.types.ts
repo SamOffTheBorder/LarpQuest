@@ -80,14 +80,54 @@ export type Database = {
           },
         ]
       }
+      arc_summaries: {
+        Row: {
+          created_at: string
+          embedding: string | null
+          from_chapter: number
+          id: string
+          story_id: string
+          summary: string
+          to_chapter: number
+        }
+        Insert: {
+          created_at?: string
+          embedding?: string | null
+          from_chapter: number
+          id?: string
+          story_id: string
+          summary: string
+          to_chapter: number
+        }
+        Update: {
+          created_at?: string
+          embedding?: string | null
+          from_chapter?: number
+          id?: string
+          story_id?: string
+          summary?: string
+          to_chapter?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "arc_summaries_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chapters: {
         Row: {
           created_at: string
+          embedding: string | null
           entity_ids: string[]
           extracted_diffs: Json | null
           extraction_status: string
           id: string
           image_prompts: Json | null
+          memory_status: string
           prose: string
           published_at: string
           rolled_back_at: string | null
@@ -100,11 +140,13 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          embedding?: string | null
           entity_ids?: string[]
           extracted_diffs?: Json | null
           extraction_status?: string
           id?: string
           image_prompts?: Json | null
+          memory_status?: string
           prose: string
           published_at?: string
           rolled_back_at?: string | null
@@ -117,11 +159,13 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          embedding?: string | null
           entity_ids?: string[]
           extracted_diffs?: Json | null
           extraction_status?: string
           id?: string
           image_prompts?: Json | null
+          memory_status?: string
           prose?: string
           published_at?: string
           rolled_back_at?: string | null
@@ -292,6 +336,57 @@ export type Database = {
           },
           {
             foreignKeyName: "extraction_queue_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      memory_queue: {
+        Row: {
+          attempt_count: number
+          chapter_id: string
+          claimed_at: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          status: string
+          story_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          chapter_id: string
+          claimed_at?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          story_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          chapter_id?: string
+          claimed_at?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          story_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memory_queue_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: true
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_queue_story_id_fkey"
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
@@ -595,6 +690,9 @@ export type Database = {
       }
       universe_versions: {
         Row: {
+          canon_bible_rules_only: Json | null
+          canon_bible_summary: Json | null
+          context_policy: Json
           created_at: string
           entity_schema: Json
           id: string
@@ -605,6 +703,9 @@ export type Database = {
           version: number
         }
         Insert: {
+          canon_bible_rules_only?: Json | null
+          canon_bible_summary?: Json | null
+          context_policy?: Json
           created_at?: string
           entity_schema: Json
           id?: string
@@ -615,6 +716,9 @@ export type Database = {
           version: number
         }
         Update: {
+          canon_bible_rules_only?: Json | null
+          canon_bible_summary?: Json | null
+          context_policy?: Json
           created_at?: string
           entity_schema?: Json
           id?: string
@@ -757,6 +861,26 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      claim_memory_job: {
+        Args: { stale_after?: string }
+        Returns: {
+          attempt_count: number
+          chapter_id: string
+          claimed_at: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          status: string
+          story_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "memory_queue"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_entity_with_history: {
         Args: {
           p_controlled_by?: string
@@ -849,6 +973,9 @@ export type Database = {
           }
       create_universe_with_version: {
         Args: {
+          p_canon_bible_rules_only?: Json
+          p_canon_bible_summary?: Json
+          p_context_policy?: Json
           p_entity_schema: Json
           p_name: string
           p_owner_id: string
@@ -856,6 +983,9 @@ export type Database = {
           p_progression_model: string
         }
         Returns: {
+          canon_bible_rules_only: Json | null
+          canon_bible_summary: Json | null
+          context_policy: Json
           created_at: string
           entity_schema: Json
           id: string
@@ -874,6 +1004,31 @@ export type Database = {
       }
       is_story_member: { Args: { target_story_id: string }; Returns: boolean }
       is_story_owner: { Args: { target_story_id: string }; Returns: boolean }
+      match_arc_summaries: {
+        Args: {
+          p_match_count?: number
+          p_query_embedding: string
+          p_story_id: string
+        }
+        Returns: {
+          from_chapter: number
+          similarity: number
+          summary: string
+          to_chapter: number
+        }[]
+      }
+      match_chapter_summaries: {
+        Args: {
+          p_match_count?: number
+          p_query_embedding: string
+          p_story_id: string
+        }
+        Returns: {
+          similarity: number
+          summary: string
+          turn_number: number
+        }[]
+      }
       open_turn: {
         Args: { p_mode?: string; p_scene_setup?: string; p_story_id: string }
         Returns: {
@@ -901,11 +1056,13 @@ export type Database = {
         Args: { p_entity_ids?: string[]; p_prose: string; p_turn_id: string }
         Returns: {
           created_at: string
+          embedding: string | null
           entity_ids: string[]
           extracted_diffs: Json | null
           extraction_status: string
           id: string
           image_prompts: Json | null
+          memory_status: string
           prose: string
           published_at: string
           rolled_back_at: string | null
@@ -925,6 +1082,9 @@ export type Database = {
       }
       publish_universe_version: {
         Args: {
+          p_canon_bible_rules_only?: Json
+          p_canon_bible_summary?: Json
+          p_context_policy?: Json
           p_entity_schema: Json
           p_owner_id: string
           p_progression_config?: Json
@@ -932,6 +1092,9 @@ export type Database = {
           p_universe_id: string
         }
         Returns: {
+          canon_bible_rules_only: Json | null
+          canon_bible_summary: Json | null
+          context_policy: Json
           created_at: string
           entity_schema: Json
           id: string

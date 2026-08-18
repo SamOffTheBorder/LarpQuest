@@ -6,8 +6,13 @@
  * immediately, and stale context is exactly the drift the architecture exists
  * to prevent.
  *
- * Phase 1 does no retrieval and no canon compression. The signature is the one
- * Phase 4 will keep, so adding embeddings and retrieval never touches a caller.
+ * Phase 4 adds retrieval (a RETRIEVED section built from `retrievedSummaries`)
+ * and canon compression, without changing this function's purity: retrieval
+ * and compression both happen upstream (retrieval.ts, universe-version
+ * publish), and this function only ever reads text and numbers it's handed —
+ * no DB read, no embedding call, here. Every existing caller that omits the
+ * new optional inputs gets byte-identical Phase 1 output (context.test.ts's
+ * regression guard).
  */
 
 /** Entity `data` is opaque. The engine never inspects field names. */
@@ -36,6 +41,13 @@ export interface ContextStory {
   /** Free text. In Phase 1 this stands in for the Canon layer. */
   toneDirectives: string | null;
   worldLedger: Record<string, unknown>;
+  /**
+   * Resolved canon bible text — already compressed to whatever
+   * `context_policy.canonCompression` calls for, or the full bible, by the
+   * caller. `assembleContext` never reads `canon_compression` or fetches this
+   * itself; it only renders what it's handed, preserving purity.
+   */
+  canonBibleText?: string | null;
 }
 
 export interface ContextTurn {
@@ -44,12 +56,27 @@ export interface ContextTurn {
   sceneSetup: string | null;
 }
 
+/** A retrieved chapter or arc summary, ranked by similarity to the current turn's input. */
+export interface ContextRetrievedSummary {
+  /** The chapter this summary covers (its turnNumber for a chapter summary,
+   * or its toChapter for an arc summary) — used to dedupe against RECENT. */
+  turnNumber: number;
+  /** Null for an arc summary, which covers a range rather than one chapter. */
+  arcRange?: { fromChapter: number; toChapter: number };
+  summary: string;
+  similarity: number;
+}
+
 export interface AssembleContextInput {
   story: ContextStory;
   turn: ContextTurn;
   entities: readonly ContextEntity[];
   /** Most recent last. Trimmed to `recentChapterCount` and to fit the budget. */
   recentChapters: readonly ContextChapter[];
+  /** Top-K by similarity, already ranked by the caller (retrieval.ts). Any
+   * entry whose turnNumber is already covered by RECENT is excluded when
+   * rendering, so the same chapter never appears twice. */
+  retrievedSummaries?: readonly ContextRetrievedSummary[];
   submissions: readonly ContextSubmission[];
   policy?: ContextPolicy;
 }
@@ -57,11 +84,17 @@ export interface AssembleContextInput {
 export interface ContextPolicy {
   recentChapters: number;
   tokenBudget: number;
+  retrievedChapters?: number;
+  retrievalBias?: string;
+  canonCompression?: string;
 }
 
 export const DEFAULT_CONTEXT_POLICY: ContextPolicy = {
   recentChapters: 3,
   tokenBudget: 24_000,
+  retrievedChapters: 5,
+  retrievalBias: 'precedent',
+  canonCompression: 'full',
 };
 
 export interface AssembledContext {
@@ -69,6 +102,8 @@ export interface AssembledContext {
   estimatedTokens: number;
   /** Chapters omitted to fit the budget. Surfaced so the drop is visible. */
   droppedChapters: number;
+  /** Retrieved summaries omitted to fit the budget, or excluded as duplicates of a RECENT chapter. */
+  droppedRetrievedSummaries: number;
 }
 
 export class ContextBudgetError extends Error {
@@ -112,6 +147,14 @@ function renderChapter(chapter: ContextChapter): string {
   return `### Chapter ${chapter.turnNumber}\n${chapter.prose}`;
 }
 
+function renderRetrievedSummary(entry: ContextRetrievedSummary): string {
+  const label =
+    entry.arcRange !== undefined
+      ? `Chapters ${entry.arcRange.fromChapter}-${entry.arcRange.toChapter}`
+      : `Chapter ${entry.turnNumber}`;
+  return `### ${label}\n${entry.summary}`;
+}
+
 /**
  * Assemble the prompt for a turn.
  *
@@ -132,6 +175,11 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   const tone =
     story.toneDirectives !== null && story.toneDirectives.length > 0
       ? `## Tone\n${story.toneDirectives}\n\nMaintain this register.`
+      : null;
+
+  const canonSection =
+    story.canonBibleText !== undefined && story.canonBibleText !== null && story.canonBibleText.length > 0
+      ? `## Canon Bible\n${story.canonBibleText}`
       : null;
 
   const entitySection =
@@ -163,7 +211,7 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
     '- Write the chapter as prose, not a summary',
   ].join('\n');
 
-  const requiredParts = [header, tone, entitySection, ledgerSection, turnSection, constraints].filter(
+  const requiredParts = [header, canonSection, tone, entitySection, ledgerSection, turnSection, constraints].filter(
     (part): part is string => part !== null,
   );
 
@@ -204,14 +252,42 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   const recentSection =
     kept.length > 0 ? `## Recent Events\n${kept.map(renderChapter).join('\n\n')}` : null;
 
-  // Recent events sit between world state and the current turn, so the turn
-  // being written is nearest the generation point.
+  // --- Optional: retrieved summaries, lower priority than recent full-prose
+  // chapters (Part 6.2's ALWAYS > RECENT > RETRIEVED). Excludes any chapter
+  // already covered by RECENT so the same chapter never appears twice.
+  const keptTurnNumbers = new Set(kept.map((chapter) => chapter.turnNumber));
+  const retrievedCandidates = (input.retrievedSummaries ?? []).filter(
+    (entry) => !keptTurnNumbers.has(entry.turnNumber),
+  );
+
+  // Candidates arrive pre-ranked by similarity (retrieval.ts) — stop at the
+  // first that doesn't fit rather than skipping ahead to a cheaper, less
+  // relevant one, so budget pressure trims from the bottom of relevance.
+  const retrievedKept: ContextRetrievedSummary[] = [];
+  for (const entry of retrievedCandidates) {
+    const cost = estimateTokens(renderRetrievedSummary(entry));
+    if (cost > remaining) {
+      break;
+    }
+    remaining -= cost;
+    retrievedKept.push(entry);
+  }
+
+  const retrievedSection =
+    retrievedKept.length > 0
+      ? `## Relevant History\n${retrievedKept.map(renderRetrievedSummary).join('\n\n')}`
+      : null;
+
+  // Recent events and retrieved history sit between world state and the
+  // current turn, so the turn being written is nearest the generation point.
   const orderedParts = [
     header,
+    canonSection,
     tone,
     entitySection,
     ledgerSection,
     recentSection,
+    retrievedSection,
     turnSection,
     constraints,
   ].filter((part): part is string => part !== null);
@@ -222,5 +298,6 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
     prompt,
     estimatedTokens: estimateTokens(prompt),
     droppedChapters,
+    droppedRetrievedSummaries: (input.retrievedSummaries ?? []).length - retrievedKept.length,
   };
 }

@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { createUsageRecorder } from '@/lib/ai/usage';
 import { createUniverse, type UniverseVersion } from '@/lib/engine/universes';
 import { getDraft } from '@/lib/research/drafts';
 import type { DraftDocument, DraftSectionKey } from '@/lib/research/draft';
@@ -76,7 +77,8 @@ export async function publishDraft(draftId: string, ownerId: string): Promise<Pu
   const draft = await getDraft(draftId, ownerId);
   const input = draftToUniverseVersionInput(draftId, draft.input.name, draft.draft);
 
-  const universeVersion = await createUniverse(ownerId, input);
+  // storyId is null: a universe version predates any story that might use it.
+  const universeVersion = await createUniverse(ownerId, input, createUsageRecorder(null, ownerId));
 
   const supabase = createServiceRoleClient();
   await supabase

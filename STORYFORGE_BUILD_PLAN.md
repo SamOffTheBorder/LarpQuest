@@ -678,7 +678,7 @@ Rule engine with severity levels. Validator loop with retry and escalation. Gate
 Implement the remaining five modes. Mid-story mode switching.
 
 ### Phase 8 — Polish
-Image prompt generation as a first-class per-chapter feature. Full-text search across a story. Export to Markdown/PDF/EPUB. Public read-only share links. Mobile-responsive pass. Universe marketplace — browse, clone, fork published universes.
+Image prompt generation as a first-class per-chapter feature. Full-text search across a story. Export to Markdown/PDF/EPUB. Public read-only share links. Mobile-responsive pass. Universe marketplace — browse, clone, fork published universes. UI design pass — real visual design (not just Tailwind/shadcn defaults) across the turn loop, entity sheets, universe review UI, and story dashboard, once every phase's surface area exists to design against.
 
 ---
 
