@@ -66,6 +66,44 @@ create table universe_versions (
 
 No `classification`, `canon_bible`, `validation_rules`, `context_policy`, `turn_modes`, `research_gaps`, or `is_public` yet — those arrive with the phases that produce or consume them. `progression_model` is singular (Phase 2 registers `none` and `ability_unlock`; a universe picks one), not the `progression_models text[]` the future shape anticipates for universes composing several. See [Universe Versioning](/architecture/universe-versioning) for why versions are separate immutable rows.
 
+## Research drafts
+
+```sql
+create table universe_drafts (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users on delete cascade,
+  status text not null default 'researching'
+    check (status in ('researching', 'ready_for_review', 'published')),
+  input jsonb not null,                -- name, source_text, canon_cutoff, au_notes
+  draft jsonb not null default '{}',   -- accumulating per-stage section document
+  universe_id uuid references universes(id),
+  published_version int,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table research_jobs (
+  id uuid primary key default gen_random_uuid(),
+  draft_id uuid not null references universe_drafts(id) on delete cascade,
+  stage text not null,                 -- one of the eight pipeline stages
+  status text not null default 'queued'
+    check (status in ('queued', 'running', 'complete', 'failed', 'skipped')),
+  attempt_count int not null default 0,
+  output jsonb,
+  previous_output jsonb,               -- one generation back, for the re-run diff view
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (draft_id, stage)
+);
+```
+
+:::warning The one documented RLS exception
+Every other table on this page is gated through `is_story_member()`. `universe_drafts` and `research_jobs` are gated through `owner_id = auth.uid()` instead — a draft exists before any story does, so there is no `story_members` row to check yet. See [Universe Review](/architecture/universe-review#why-drafts-are-owned-by-a-user-not-gated-through-story_members).
+:::
+
+A draft's `input` and accumulating `draft` document are `jsonb` rather than relational rows per section — see [Research Pipeline](/architecture/research-pipeline) and [Universe Review](/architecture/universe-review) for the shapes stages write into `draft` and how the review workflow reads them.
+
 ## Stories
 
 ```sql
@@ -248,6 +286,8 @@ Phase 1 created: `stories`, `story_members`, `entities`, `entity_history`, `turn
 
 Phase 2 added: `universes`, `universe_versions`, and nullable `stories.universe_id` / `stories.universe_version` (composite FK into `universe_versions`). Both new columns are unbackfilled — a story created before Phase 2, or created without a universe, keeps them null permanently, not as a transitional state.
 
+Phase 3 added: `universe_drafts`, `research_jobs`, and the `start_research_job` RPC. No existing table changed.
+
 Still deferred, so later migrations are explicit about introducing them:
 
 | Object | Arrives in |
@@ -256,4 +296,4 @@ Still deferred, so later migrations are explicit about introducing them:
 | `proposals`, `canon_exceptions` | Phase 6 |
 | `universes.is_public`, `forked_from` (marketplace) | Phase 8 |
 
-Phase 1 adds one table not in the original plan — `extraction_queue`, with a claim timestamp and attempt count — because extraction runs after publication and needs stale-claim recovery. Phase 3 replaces it with a durable job runner.
+Phase 1 adds one table not in the original plan — `extraction_queue`, with a claim timestamp and attempt count — because extraction runs after publication and needs stale-claim recovery. Phase 3 introduces Inngest for the research pipeline's genuinely multi-step orchestration, but does **not** migrate `extraction_queue` onto it — that queue's one-shot retryable job has no orchestration need Inngest would improve on, so it keeps its existing claim/update shape.

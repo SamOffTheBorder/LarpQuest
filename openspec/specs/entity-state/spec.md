@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Schemaless entity records (`type`, `name`, opaque `data` jsonb) plus the append-only `entity_history` ledger, diff application with conflict detection, and rollback via compensating history rows.
+Schemaless entity records (`type`, `name`, opaque `data` jsonb) plus the append-only `entity_history` ledger, diff application with conflict detection, and rollback via compensating history rows. When a story has a pinned universe version, `data` is validated against that version's entity schema (see `entity-schema`); otherwise it remains unconstrained as in Phase 1.
 
 ## Requirements
 
 ### Requirement: Schemaless entity records
-An entity SHALL be stored as a type, a name, and an opaque `data` jsonb payload. In this phase the engine MUST NOT validate, constrain, or interpret the contents of `data`, and MUST NOT define fields specific to any genre, universe, or media type.
+An entity SHALL be stored as a type, a name, and an opaque `data` jsonb payload. When the owning story has no pinned universe version, the engine MUST NOT validate, constrain, or interpret the contents of `data`, and MUST NOT define fields specific to any genre, universe, or media type. When the owning story has a pinned universe version, `data` MUST be validated against that version's entity schema for the entity's type (see `entity-schema`), but the engine still MUST NOT branch on which universe, genre, or media type is active — only on the bounded set of schema field types.
 
-#### Scenario: Entity created with arbitrary data
-- **WHEN** a user creates an entity whose `data` contains fields the engine has never seen
+#### Scenario: Entity created with arbitrary data (no pinned universe)
+- **WHEN** a user creates an entity in a story with no pinned universe, whose `data` contains fields the engine has never seen
 - **THEN** the entity is stored unchanged and is available to context assembly
 
 #### Scenario: Engine reads an unknown field
@@ -20,6 +20,10 @@ An entity SHALL be stored as a type, a name, and an opaque `data` jsonb payload.
 #### Scenario: Entity name is required
 - **WHEN** an entity is created without a name
 - **THEN** the system rejects the request with a validation error
+
+#### Scenario: Entity data validated against a pinned schema
+- **WHEN** a user creates or updates an entity in a story with a pinned universe version
+- **THEN** `data` is validated against that version's entity schema for the entity's type before the write is persisted, per the `entity-schema` capability
 
 ### Requirement: Append-only entity history
 Every change to an entity's `data` SHALL write an `entity_history` row recording the diff, the chapter it came from when applicable, and who applied it. History rows MUST NOT be updated or deleted.
@@ -61,4 +65,3 @@ The system SHALL be able to reverse every diff applied by a given chapter, resto
 #### Scenario: Entity changed after the chapter being rolled back
 - **WHEN** a later chapter or manual edit has since changed a field that the rollback would restore
 - **THEN** the system SHALL surface the conflict for the user to resolve rather than silently overwriting the newer value
-</content>

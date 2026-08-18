@@ -2,16 +2,20 @@
 
 ## Purpose
 
-Creating, listing, opening, and archiving a story; owner membership recorded in `story_members`; per-story model and turn configuration seeded with defaults.
+Creating, listing, opening, and archiving a story; owner membership recorded in `story_members`; per-story model and turn configuration seeded with defaults; optional pinning to a published universe version that persists independently of the universe's later evolution.
 
 ## Requirements
 
 ### Requirement: Story creation
-An authenticated user SHALL be able to create a story by supplying a title and a content rating. The system MUST record the creator as the owner in `story_members` in the same transaction that inserts the story.
+An authenticated user SHALL be able to create a story by supplying a title and a content rating, and MAY optionally pin it to a published universe version. The system MUST record the creator as the owner in `story_members` in the same transaction that inserts the story.
 
 #### Scenario: Story is created successfully
 - **WHEN** an authenticated user submits a valid title and content rating
 - **THEN** the system inserts a `stories` row with `current_turn` 0 and status `active`, inserts a `story_members` row with role `owner`, and redirects to the story
+
+#### Scenario: Story created with a universe
+- **WHEN** an authenticated user submits a valid title, content rating, and an existing published universe
+- **THEN** the system inserts the `stories` row with `universe_id` and `universe_version` set to that universe's latest published version at creation time
 
 #### Scenario: Membership insert fails
 - **WHEN** the `story_members` insert fails after the `stories` insert
@@ -57,4 +61,10 @@ The owner SHALL be able to archive a story. Archiving MUST be reversible and MUS
 #### Scenario: Owner restores an archived story
 - **WHEN** the owner restores an archived story
 - **THEN** the story returns to `active` and accepts new turns, with its turn numbering continuing from where it stopped
-</content>
+
+### Requirement: Universe version pin persists independently of the universe
+A story's `universe_id` and `universe_version` SHALL persist unchanged as the universe evolves, and change only through an explicit owner-initiated upgrade.
+
+#### Scenario: Universe publishes a new version
+- **WHEN** a story is pinned to universe version 1 and its universe publishes version 2
+- **THEN** the story's `universe_version` remains 1 until its owner explicitly upgrades it

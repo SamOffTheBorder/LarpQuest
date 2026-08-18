@@ -40,8 +40,8 @@ A universe's identity (`universes`) and its versioned content (`universe_version
 
 Neither ever touches an existing row. "Editing" a universe's schema, in the system's vocabulary, means calling `publish_universe_version` — there is no operation that mutates a published version in place.
 
-:::tip No draft state in Phase 2
-Phase 2 has no research pipeline and no human-review UI yet (that's [Phase 3](/phases/build-order#phase-3--research-pipeline)), so a universe's first version is published the moment it's created — there is no separate unpublished-draft state to manage. Phase 3 is expected to introduce one; the immutable-version model underneath does not change when it does.
+:::tip Draft state arrives in Phase 3, above this layer
+Phase 2 has no research pipeline and no human-review UI, so a universe's first version was published the moment it was created. [Phase 3](/phases/phase-3-research-pipeline) introduces `universe_drafts` — a review workflow that sits entirely *above* this immutable-version model: a draft accumulates and gets reviewed as ordinary `jsonb`, and only calls `createUniverse` once accepted. Nothing here changed to support it.
 :::
 
 ## Stories pin, and only move on explicit request
