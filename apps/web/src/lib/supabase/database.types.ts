@@ -299,6 +299,53 @@ export type Database = {
           },
         ]
       }
+      research_jobs: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          draft_id: string
+          id: string
+          last_error: string | null
+          output: Json | null
+          previous_output: Json | null
+          stage: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          draft_id: string
+          id?: string
+          last_error?: string | null
+          output?: Json | null
+          previous_output?: Json | null
+          stage: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          draft_id?: string
+          id?: string
+          last_error?: string | null
+          output?: Json | null
+          previous_output?: Json | null
+          stage?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "research_jobs_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "universe_drafts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stories: {
         Row: {
           content_rating: string
@@ -498,6 +545,50 @@ export type Database = {
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      universe_drafts: {
+        Row: {
+          created_at: string
+          draft: Json
+          id: string
+          input: Json
+          owner_id: string
+          published_version: number | null
+          status: string
+          universe_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          draft?: Json
+          id?: string
+          input: Json
+          owner_id: string
+          published_version?: number | null
+          status?: string
+          universe_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          draft?: Json
+          id?: string
+          input?: Json
+          owner_id?: string
+          published_version?: number | null
+          status?: string
+          universe_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "universe_drafts_universe_id_fkey"
+            columns: ["universe_id"]
+            isOneToOne: false
+            referencedRelation: "universes"
             referencedColumns: ["id"]
           },
         ]
@@ -865,6 +956,27 @@ export type Database = {
           field: string
           outcome: string
         }[]
+      }
+      start_research_job: {
+        Args: { p_draft_id: string; p_stage: string }
+        Returns: {
+          attempt_count: number
+          created_at: string
+          draft_id: string
+          id: string
+          last_error: string | null
+          output: Json | null
+          previous_output: Json | null
+          stage: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "research_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       upgrade_story_universe_version: {
         Args: {

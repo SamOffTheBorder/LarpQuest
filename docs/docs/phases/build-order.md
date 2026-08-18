@@ -13,7 +13,7 @@ Each phase depends on the last. The ordering is not a preference — it is a dep
 |---|---|---|
 | [1](/phases/phase-1-generic-core) | Generic Core | ~3 weeks |
 | [2](/phases/phase-2-universe-system) | Universe System | ~3 weeks |
-| 3 | Research Pipeline | ~3 weeks |
+| [3](/phases/phase-3-research-pipeline) | Research Pipeline | ~3 weeks |
 | 4 | Memory | ~2 weeks |
 | 5 | Multiplayer | ~3 weeks |
 | 6 | Validation & Gatekeeping | ~2 weeks |
@@ -40,9 +40,11 @@ This is the phase that proves or disproves the whole architecture.
 
 ## Phase 3 — Research Pipeline
 
-The 8-stage async job, progress streaming, human review UI, draft → published universe flow, confidence and gaps reporting.
+**Status: implemented.** The 8-stage async job, progress streaming, human review UI, draft → published universe flow, confidence and gaps reporting.
 
 **Exit criteria:** Typing "Jujutsu Kaisen" produces a usable universe in under 15 minutes with a reviewable bible.
+
+→ [Full Phase 3 specification](/phases/phase-3-research-pipeline)
 
 ### The eight stages
 

@@ -41,6 +41,13 @@ const serverSchema = z.object({
   ENCRYPTION_MASTER_KEY: base64Key,
   /** Bearer token required to trigger the extraction worker route. */
   WORKER_SECRET: z.string().min(16, 'must be at least 16 characters'),
+  /**
+   * Inngest deploy keys. Optional: absent in local dev, where the Inngest SDK
+   * auto-discovers the local Dev Server (`npm run dev:inngest`) without them.
+   * Required in production — Inngest Cloud rejects unsigned requests there.
+   */
+  INNGEST_EVENT_KEY: z.string().min(1).optional(),
+  INNGEST_SIGNING_KEY: z.string().min(1).optional(),
 });
 
 function parse<T extends z.ZodTypeAny>(schema: T, source: unknown, label: string): z.infer<T> {
