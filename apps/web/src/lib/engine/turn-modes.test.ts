@@ -12,12 +12,14 @@ import {
  * These tests guard the property, not the current contents.
  */
 
+const DEFAULT_STORY_CONTEXT = { contentRating: 'teen', conflictPolicy: 'narrative_priority' };
+
 describe('turn mode dispatch', () => {
   it('resolves the freeform mode', () => {
     const mode = resolveTurnMode('freeform');
 
     expect(mode.name).toBe('freeform');
-    expect(mode.systemPrompt.length).toBeGreaterThan(0);
+    expect(mode.systemPrompt(DEFAULT_STORY_CONTEXT).length).toBeGreaterThan(0);
   });
 
   it('rejects an unregistered mode by name', () => {
@@ -40,5 +42,44 @@ describe('turn mode dispatch', () => {
     // branch on their contents, so the only contract is that they exist.
     expect(mode.extractionTargets.length).toBeGreaterThan(0);
     expect(mode.extractionTargets.every((target) => typeof target === 'string')).toBe(true);
+  });
+});
+
+describe('content rating and conflict policy prompt wiring', () => {
+  const mode = resolveTurnMode('freeform');
+
+  it('each content_rating value produces distinct prompt text', () => {
+    const everyone = mode.systemPrompt({ contentRating: 'everyone', conflictPolicy: 'narrative_priority' });
+    const teen = mode.systemPrompt({ contentRating: 'teen', conflictPolicy: 'narrative_priority' });
+    const mature = mode.systemPrompt({ contentRating: 'mature', conflictPolicy: 'narrative_priority' });
+
+    expect(new Set([everyone, teen, mature]).size).toBe(3);
+    expect(everyone).toContain('all audiences');
+    expect(teen).toContain('teen audiences');
+    expect(mature).toContain('mature audiences');
+  });
+
+  it('each conflict_policy value produces distinct prompt text', () => {
+    const policies = ['narrative_priority', 'initiative_order', 'gm_ruling', 'both_partially_succeed'] as const;
+    const prompts = policies.map((conflictPolicy) => mode.systemPrompt({ contentRating: 'teen', conflictPolicy }));
+
+    expect(new Set(prompts).size).toBe(4);
+  });
+
+  it('two different universes with the same policy values produce byte-identical instruction text', () => {
+    // "Different universes" is represented by nothing more than a different
+    // story title / entity set upstream — this function never receives or
+    // reads universe/genre identity at all, so the same policy values must
+    // always resolve to the same text regardless of what story they came from.
+    const a = mode.systemPrompt({ contentRating: 'mature', conflictPolicy: 'gm_ruling' });
+    const b = mode.systemPrompt({ contentRating: 'mature', conflictPolicy: 'gm_ruling' });
+
+    expect(a).toBe(b);
+  });
+
+  it('an unrecognized content_rating or conflict_policy value falls back rather than throwing', () => {
+    expect(() =>
+      mode.systemPrompt({ contentRating: 'unknown-rating', conflictPolicy: 'unknown-policy' }),
+    ).not.toThrow();
   });
 });

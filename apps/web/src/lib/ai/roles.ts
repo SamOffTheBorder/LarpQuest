@@ -19,6 +19,7 @@ export const MODEL_ROLES = [
   'summarizer',
   'gatekeeper',
   'embedder',
+  'moderator',
 ] as const;
 
 export type ModelRole = (typeof MODEL_ROLES)[number];
@@ -45,6 +46,9 @@ export const DEFAULT_MODELS: Record<ModelRole, string> = {
   summarizer: 'anthropic/claude-haiku-4.5',
   gatekeeper: 'anthropic/claude-sonnet-4.5',
   embedder: 'openai/text-embedding-3-small',
+  // Cheap and fast: moderation runs once per turn lock on the critical path
+  // to generation, and only needs to classify, not write.
+  moderator: 'anthropic/claude-haiku-4.5',
 };
 
 /**

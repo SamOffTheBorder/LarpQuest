@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Story } from '@/lib/engine/stories';
 import type { Submission, Turn } from '@/lib/engine/turns';
+import { useStoryPresence, useTurnPresence } from '@/lib/realtime/presence';
 
 interface TurnPanelProps {
   storyId: string;
@@ -17,6 +18,7 @@ interface TurnPanelProps {
   turn: Turn | null;
   submissions: Submission[];
   userId: string;
+  claimedEntityIds: string[];
 }
 
 type StreamEvent =
@@ -25,12 +27,25 @@ type StreamEvent =
   | { type: 'done'; chapterId: string; turnNumber: number }
   | { type: 'error'; message: string };
 
-export function TurnPanel({ storyId, story, turn, submissions, userId }: TurnPanelProps) {
+export function TurnPanel({
+  storyId,
+  story,
+  turn,
+  submissions,
+  userId,
+  claimedEntityIds,
+}: TurnPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [streamedProse, setStreamedProse] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+
+  const onlineMembers = useStoryPresence(storyId, userId);
+  const submittedEntityIds = submissions
+    .map((submission) => submission.entityId)
+    .filter((id): id is string => id !== null);
+  const completeness = useTurnPresence(storyId, turn?.id ?? null, claimedEntityIds, submittedEntityIds);
 
   function runAction(action: () => Promise<{ status: 'idle' | 'error'; message?: string }>) {
     setError(null);
@@ -127,7 +142,14 @@ export function TurnPanel({ storyId, story, turn, submissions, userId }: TurnPan
     <Card>
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle>Turn {story.currentTurn + 1}</CardTitle>
-        <TurnStatusBadge status={turn.status} />
+        <div className="flex items-center gap-2">
+          {onlineMembers.length > 0 && (
+            <Badge variant="outline">
+              {onlineMembers.length} online
+            </Badge>
+          )}
+          <TurnStatusBadge status={turn.status} />
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {turn.sceneSetup !== null && <p className="text-sm">{turn.sceneSetup}</p>}
@@ -138,6 +160,8 @@ export function TurnPanel({ storyId, story, turn, submissions, userId }: TurnPan
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 {submissions.length} submission{submissions.length === 1 ? '' : 's'} so far
+                {completeness.totalClaimed > 0 &&
+                  ` · waiting on ${completeness.waitingOn} of ${completeness.totalClaimed}`}
               </p>
               <Button
                 disabled={isStreaming || submissions.length === 0}

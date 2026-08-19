@@ -132,9 +132,37 @@ create table story_members (
   joined_at timestamptz default now(),
   primary key (story_id, user_id)
 );
+
+create table story_invites (        -- Phase 5
+  id uuid primary key default gen_random_uuid(),
+  story_id uuid references stories(id) on delete cascade,
+  token text not null unique,
+  role text not null,                 -- gm|player|spectator (never owner)
+  created_by uuid references auth.users,
+  expires_at timestamptz not null,
+  revoked_at timestamptz,
+  max_uses int,
+  use_count int not null default 0,
+  created_at timestamptz default now()
+);
+
+create table story_reports (        -- Phase 5
+  id uuid primary key default gen_random_uuid(),
+  story_id uuid references stories(id) on delete cascade,
+  reporter_id uuid references auth.users,
+  chapter_id uuid references chapters(id) on delete cascade,
+  submission_id uuid references submissions(id) on delete cascade,
+  reason text not null,
+  created_at timestamptz default now()
+  -- check: exactly one of chapter_id/submission_id is non-null
+);
 ```
 
 `universe_version` is **pinned**, not a live reference. This is what stops a canon edit from retroactively invalidating 40 published chapters.
+
+`stories` also gained a `conflict_policy text` column in Phase 5 (`narrative_priority` default, `initiative_order`, `gm_ruling`, `both_partially_succeed`) — folded into the Narrator prompt, never a code branch. See [Multiplayer](/architecture/multiplayer#conflict-resolution).
+
+`story_members.role` existed from Phase 1, but only `owner` was ever inserted until Phase 5 added `story_invites`/`join_story_via_invite` as the only path for a second user to join. `entities_update` and `story_members_delete` RLS were narrowed in Phase 5 — see [Multiplayer](/architecture/multiplayer#roles-and-authorization).
 
 ## Entities
 
@@ -166,6 +194,8 @@ Every state change is a row. Without it, rollback is impossible and debugging st
 :::
 
 Entity state must be fully reconstructible by replaying `entity_history` alone.
+
+`controlled_by` existed since Phase 1 but was schema-only until Phase 5 started reading and enforcing it — see [Multiplayer](/architecture/multiplayer#entity-claiming). A manual edit now requires being the entity's controller, or `owner`/`gm`.
 
 ## Narrative
 
@@ -222,7 +252,9 @@ create table turns (
   mode text not null,
   scene_setup text,
   status text default 'open',         -- open|locked|generating|published|failed
-  deadline timestamptz,
+  deadline timestamptz,               -- unused until Phase 5's deadline sweep
+  moderation_status text,             -- Phase 5: pass|flag|block
+  moderation_reason text,             -- Phase 5
   created_at timestamptz default now()
 );
 
@@ -238,6 +270,8 @@ create table submissions (
 ```
 
 Submissions are a **separate table from generation state** by design. No generation outcome — failure, timeout, retry exhaustion — may delete or alter a submission.
+
+`turns.deadline` was present from Phase 1's original migration but read by nothing until Phase 5's `sweepDeadlines`. `moderation_status`/`moderation_reason` record the once-per-turn moderation pass Phase 5 added — see [Multiplayer](/architecture/multiplayer#moderation).
 
 ## Gatekeeper and canon exceptions
 
@@ -308,6 +342,8 @@ Phase 2 added: `universes`, `universe_versions`, and nullable `stories.universe_
 Phase 3 added: `universe_drafts`, `research_jobs`, and the `start_research_job` RPC. No existing table changed.
 
 Phase 4 added: the `vector` extension (in a dedicated `extensions` schema, not `public`), `chapters.embedding`/`memory_status`, `arc_summaries`, `memory_queue`, `universe_versions.context_policy`/`canon_bible_summary`/`canon_bible_rules_only`. New RPCs: `claim_memory_job`, `match_chapter_summaries`, `match_arc_summaries`. `create_universe_with_version` and `publish_universe_version` gained new parameters — this required dropping and recreating both functions, since `create or replace` cannot change a parameter list.
+
+Phase 5 added: `story_invites`, `story_reports`, `stories.conflict_policy`, `turns.moderation_status`/`moderation_reason`. New RPCs: `join_story_via_invite`; new policy helper `is_story_role` (mirrors `is_story_owner`'s shape, both revoked from direct client execution). `entities_update` and `story_members_delete` RLS policies were narrowed (dropped and recreated) rather than replaced with new tables.
 
 Still deferred, so later migrations are explicit about introducing them:
 

@@ -45,7 +45,11 @@ export async function generateBaseline(
   const supabase = createServiceRoleClient();
 
   const [storyResult, chaptersResult, submissionsResult] = await Promise.all([
-    supabase.from('stories').select('title, model_config').eq('id', storyId).single(),
+    supabase
+      .from('stories')
+      .select('title, model_config, content_rating, conflict_policy')
+      .eq('id', storyId)
+      .single(),
     supabase
       .from('chapters')
       .select('turn_number, prose, turn_mode')
@@ -106,7 +110,10 @@ export async function generateBaseline(
     },
     {
       modelConfig: storyResult.data.model_config as never,
-      systemPrompt: mode.systemPrompt,
+      systemPrompt: mode.systemPrompt({
+        contentRating: storyResult.data.content_rating,
+        conflictPolicy: storyResult.data.conflict_policy,
+      }),
       userPrompt: baselinePrompt,
       onChunk: () => {
         // No live progress needed for a one-off comparison generation.

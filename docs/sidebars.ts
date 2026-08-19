@@ -18,6 +18,7 @@ const sidebars: SidebarsConfig = {
         'architecture/context-assembly',
         'architecture/memory-and-context',
         'architecture/validation-gatekeeping',
+        'architecture/multiplayer',
       ],
     },
     {
@@ -30,6 +31,7 @@ const sidebars: SidebarsConfig = {
         'phases/phase-2-universe-system',
         'phases/phase-3-research-pipeline',
         'phases/phase-4-memory',
+        'phases/phase-5-multiplayer',
         'phases/getting-started',
       ],
     },

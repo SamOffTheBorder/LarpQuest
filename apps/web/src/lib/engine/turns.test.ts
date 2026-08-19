@@ -11,7 +11,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   turns: new Map<string, Record<string, unknown>>(),
   submissions: [] as Record<string, unknown>[],
-  members: new Set<string>(),
+  entities: new Map<string, Record<string, unknown>>(),
+  /** key: `${storyId}:${userId}` -> role */
+  members: new Map<string, string>(),
   /** Every table mutated, in order. Submissions must never appear. */
   writes: [] as { table: string; op: string }[],
   narrationBehavior: 'succeed' as 'succeed' | 'throw' | 'incomplete',
@@ -36,7 +38,17 @@ vi.mock('@/lib/memory/retrieval', () => ({
   retrieveRelevantSummaries: async () => [],
 }));
 
+class FakeStructuredOutputError extends Error {}
+
 vi.mock('@/lib/ai/gateway', () => ({
+  StructuredOutputError: FakeStructuredOutputError,
+  // Moderation always passes in this fixture; moderate.test.ts exercises the
+  // pass/flag/block/degraded matrix directly.
+  callStructured: async () => ({
+    data: { verdict: 'pass', reason: 'ok' },
+    resolvedModel: 'm',
+    usedFallbackModel: false,
+  }),
   streamNarration: async (
     _deps: unknown,
     args: { onChunk: (text: string) => void },
@@ -148,8 +160,9 @@ vi.mock('@/lib/supabase/server', () => {
       async maybeSingle() {
         if (table === 'story_members') {
           const key = `${builder._filters.story_id}:${builder._filters.user_id}`;
+          const role = state.members.get(key);
           return {
-            data: state.members.has(key) ? { user_id: builder._filters.user_id } : null,
+            data: role !== undefined ? { user_id: builder._filters.user_id, role } : null,
             error: null,
           };
         }
@@ -163,6 +176,11 @@ vi.mock('@/lib/supabase/server', () => {
           return { data: found ?? null, error: null };
         }
 
+        if (table === 'entities') {
+          const found = state.entities.get(builder._filters.id as string);
+          return { data: found ?? null, error: null };
+        }
+
         return { data: null, error: null };
       },
       async single() {
@@ -173,6 +191,8 @@ vi.mock('@/lib/supabase/server', () => {
               world_ledger: {},
               model_config: null,
               turn_config: {},
+              content_rating: 'teen',
+              conflict_policy: 'narrative_priority',
             },
             error: null,
           };
@@ -209,6 +229,23 @@ vi.mock('@/lib/supabase/server', () => {
           return { data: { id: 'chapter-1', turn_number: 1 }, error: null };
         }
 
+        if (name === 'open_turn') {
+          const id = `turn-${state.turns.size + 1}`;
+          const row = {
+            id,
+            story_id: args.p_story_id,
+            turn_number: state.turns.size + 1,
+            mode: args.p_mode,
+            scene_setup: args.p_scene_setup ?? null,
+            status: 'open',
+            partial_prose: null,
+            failure_reason: null,
+            attempt_count: 0,
+          };
+          state.turns.set(id, row);
+          return { data: row, error: null };
+        }
+
         return { data: null, error: null };
       },
     }),
@@ -223,9 +260,12 @@ const TURN = 'turn-1';
 beforeEach(() => {
   state.turns.clear();
   state.submissions.length = 0;
+  state.entities.clear();
   state.writes.length = 0;
   state.members.clear();
-  state.members.add(`${STORY}:${USER}`);
+  // Owner-run, GM-less story is the default fixture — matches every prior
+  // Phase 1-4 test's implicit assumption that USER can do everything.
+  state.members.set(`${STORY}:${USER}`, 'owner');
   state.narrationBehavior = 'succeed';
 
   state.turns.set(TURN, {
@@ -298,6 +338,104 @@ describe('lock', () => {
     state.turns.set(TURN, { ...turnRow(TURN), status: 'published' });
 
     await expect(lockTurn(TURN, USER)).rejects.toThrow(/Invalid turn transition/);
+  });
+});
+
+describe('role gates', () => {
+  const PLAYER = 'player-1';
+
+  beforeEach(() => {
+    state.members.set(`${STORY}:${PLAYER}`, 'player');
+  });
+
+  it('player cannot open a turn', async () => {
+    const { openTurn } = await import('@/lib/engine/turns');
+
+    await expect(openTurn(STORY, PLAYER)).rejects.toThrow(/required roles/);
+  });
+
+  it('player cannot manually lock a turn', async () => {
+    const { createSubmission, lockTurn } = await import('@/lib/engine/turns');
+
+    await createSubmission(TURN, USER, { content: 'I wait.', entityId: null });
+
+    await expect(lockTurn(TURN, PLAYER)).rejects.toThrow(/required roles/);
+  });
+
+  it('deadline-sourced lock bypasses the role check', async () => {
+    const { createSubmission, lockTurn } = await import('@/lib/engine/turns');
+
+    await createSubmission(TURN, USER, { content: 'I wait.', entityId: null });
+
+    const locked = await lockTurn(TURN, PLAYER, { source: 'deadline' });
+    expect(locked.status).toBe('locked');
+  });
+
+  it('owner-run, GM-less story still opens and locks normally', async () => {
+    const { openTurn, createSubmission, lockTurn } = await import('@/lib/engine/turns');
+
+    // TURN already open from beforeEach; lock it first so a second open is legal.
+    await createSubmission(TURN, USER, { content: 'I wait.', entityId: null });
+    await lockTurn(TURN, USER);
+    state.turns.set(TURN, { ...turnRow(TURN), status: 'published' });
+
+    const opened = await openTurn(STORY, USER);
+    expect(opened.status).toBe('open');
+  });
+});
+
+describe('entity control on submissions', () => {
+  const CONTROLLER = 'controller-1';
+  const OTHER_PLAYER = 'other-player-1';
+  const ENTITY = '11111111-1111-4111-8111-111111111111';
+  const UNCLAIMED_ENTITY = '22222222-2222-4222-8222-222222222222';
+
+  beforeEach(() => {
+    state.members.set(`${STORY}:${CONTROLLER}`, 'player');
+    state.members.set(`${STORY}:${OTHER_PLAYER}`, 'player');
+    state.entities.set(ENTITY, { id: ENTITY, controlled_by: CONTROLLER });
+  });
+
+  it('the controller can submit for their entity', async () => {
+    const { createSubmission } = await import('@/lib/engine/turns');
+
+    const submission = await createSubmission(TURN, CONTROLLER, {
+      content: 'I strike.',
+      entityId: ENTITY,
+    });
+
+    expect(submission.entityId).toBe(ENTITY);
+  });
+
+  it('a non-controller, non-GM cannot submit for a claimed entity', async () => {
+    const { createSubmission } = await import('@/lib/engine/turns');
+
+    await expect(
+      createSubmission(TURN, OTHER_PLAYER, { content: 'I strike.', entityId: ENTITY }),
+    ).rejects.toThrow(/does not control entity/);
+  });
+
+  it('owner/gm can submit for any entity, including one claimed by someone else', async () => {
+    const { createSubmission } = await import('@/lib/engine/turns');
+
+    const submission = await createSubmission(TURN, USER, {
+      content: 'The GM narrates for this character.',
+      entityId: ENTITY,
+    });
+
+    expect(submission.entityId).toBe(ENTITY);
+  });
+
+  it('any member can submit for an unclaimed entity', async () => {
+    const { createSubmission } = await import('@/lib/engine/turns');
+    state.entities.set(UNCLAIMED_ENTITY, { id: UNCLAIMED_ENTITY, controlled_by: null });
+
+    const submission = await createSubmission(TURN, OTHER_PLAYER, {
+      content: 'I step in.',
+      entityId: UNCLAIMED_ENTITY,
+    });
+
+    expect(submission.entityId).toBe(UNCLAIMED_ENTITY);
   });
 });
 

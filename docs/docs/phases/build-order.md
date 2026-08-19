@@ -15,7 +15,7 @@ Each phase depends on the last. The ordering is not a preference — it is a dep
 | [2](/phases/phase-2-universe-system) | Universe System | ~3 weeks |
 | [3](/phases/phase-3-research-pipeline) | Research Pipeline | ~3 weeks |
 | [4](/phases/phase-4-memory) | Memory | ~2 weeks |
-| 5 | Multiplayer | ~3 weeks |
+| [5](/phases/phase-5-multiplayer) | Multiplayer | ~3 weeks |
 | 6 | Validation & Gatekeeping | ~2 weeks |
 | 7 | Turn Modes | ~2 weeks |
 | 8 | Polish | — |
@@ -75,9 +75,11 @@ Each stage is a discrete, individually retryable sub-job writing to a shared dra
 
 ## Phase 5 — Multiplayer
 
-Rooms, invites, roles, entity claiming, turn locks and deadlines, realtime presence, conflict resolution policy, safety controls.
+**Status: implemented.** Rooms, invites, roles, entity claiming, turn locks and deadlines, realtime presence, conflict resolution policy, safety controls.
 
 **Exit criteria:** Five people run a story together across a week without coordinating outside the app.
+
+→ [Full Phase 5 specification](/phases/phase-5-multiplayer)
 
 ### Roles
 

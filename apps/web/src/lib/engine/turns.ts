@@ -12,11 +12,12 @@ import {
   type ContextEntity,
   type ContextPolicy,
 } from '@/lib/engine/context';
-import { assertMember } from '@/lib/engine/membership';
+import { assertMember, requireRole } from '@/lib/engine/membership';
 import { DEFAULT_TURN_MODE, resolveTurnMode } from '@/lib/engine/turn-modes';
 import { acceptsSubmissions, assertTransition, type TurnStatus } from '@/lib/engine/turn-state';
 import type { ContextPolicy as StoredContextPolicy } from '@/lib/memory/schemas';
 import { retrieveRelevantSummaries } from '@/lib/memory/retrieval';
+import { moderateTurnSubmissions } from '@/lib/moderation/moderate';
 import { serverEnv } from '@/lib/env';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
@@ -98,6 +99,74 @@ export class LiveTurnExistsError extends Error {
   }
 }
 
+export class TurnBlockedByModerationError extends Error {
+  constructor(
+    readonly turnId: string,
+    readonly reason: string,
+  ) {
+    super(`Turn ${turnId} was blocked by moderation: ${reason}`);
+    this.name = 'TurnBlockedByModerationError';
+  }
+}
+
+export class NotEntityControllerError extends Error {
+  constructor(
+    readonly entityId: string,
+    readonly userId: string,
+  ) {
+    super(`User ${userId} does not control entity ${entityId} and is not owner or GM.`);
+    this.name = 'NotEntityControllerError';
+  }
+}
+
+/**
+ * A submission targeting a claimed entity may only be made by that entity's
+ * controller, unless the caller is owner/gm (who may submit on behalf of an
+ * unclaimed or absent-player entity, per build plan 7.4). An unclaimed
+ * entity (controlled_by null) remains submittable by any member.
+ */
+async function assertCanSubmitForEntity(
+  storyId: string,
+  userId: string,
+  entityId: string | null,
+): Promise<void> {
+  if (entityId === null) {
+    return;
+  }
+
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('entities')
+    .select('controlled_by')
+    .eq('id', entityId)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`Failed to read entity controller: ${error.message}`);
+  }
+
+  const controlledBy = data?.controlled_by ?? null;
+
+  if (controlledBy === null || controlledBy === userId) {
+    return;
+  }
+
+  if (await hasRoleInStory(storyId, userId, ['owner', 'gm'])) {
+    return;
+  }
+
+  throw new NotEntityControllerError(entityId, userId);
+}
+
+async function hasRoleInStory(storyId: string, userId: string, allowed: readonly string[]): Promise<boolean> {
+  try {
+    await requireRole(storyId, userId, allowed as ('owner' | 'gm' | 'player' | 'spectator')[]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function loadTurn(turnId: string): Promise<Turn> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
@@ -130,7 +199,7 @@ export async function openTurn(
   userId: string,
   options: { mode?: string; sceneSetup?: string | null } = {},
 ): Promise<Turn> {
-  await assertMember(storyId, userId);
+  await requireRole(storyId, userId, ['owner', 'gm']);
 
   const mode = options.mode ?? DEFAULT_TURN_MODE;
   resolveTurnMode(mode); // Reject an unregistered mode before writing.
@@ -220,6 +289,8 @@ export async function createSubmission(
     throw new TurnStateError(turnId, turn.status, 'submissions are only accepted while open.');
   }
 
+  await assertCanSubmitForEntity(turn.storyId, userId, parsed.entityId);
+
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('submissions')
@@ -277,6 +348,8 @@ export async function updateSubmission(
     throw new TurnStateError(turn.id, turn.status, 'submissions are frozen once locked.');
   }
 
+  await assertCanSubmitForEntity(turn.storyId, userId, parsed.entityId);
+
   const { data, error } = await supabase
     .from('submissions')
     .update({ content: parsed.content, entity_id: parsed.entityId })
@@ -329,10 +402,27 @@ export async function listSubmissionsForTurn(
  * 7.4  Lock
  * ------------------------------------------------------------------ */
 
-/** Lock a turn, freezing submissions. Rejected when there are none. */
-export async function lockTurn(turnId: string, userId: string): Promise<Turn> {
+/**
+ * Lock a turn, freezing submissions. Rejected when there are none.
+ *
+ * `source: 'manual'` (the default) requires the caller to hold owner/gm — a
+ * player cannot lock a turn out from under other players. `source: 'deadline'`
+ * is used only by the deadline sweep (deadlines.ts), which is not acting on
+ * behalf of any one user and so is exempt from the role check by design.
+ */
+export async function lockTurn(
+  turnId: string,
+  userId: string,
+  options: { source?: 'manual' | 'deadline' } = {},
+): Promise<Turn> {
+  const source = options.source ?? 'manual';
   const turn = await loadTurn(turnId);
-  await assertMember(turn.storyId, userId);
+
+  if (source === 'manual') {
+    await requireRole(turn.storyId, userId, ['owner', 'gm']);
+  } else {
+    await assertMember(turn.storyId, userId);
+  }
 
   assertTransition(turn.status, 'locked');
 
@@ -370,7 +460,55 @@ export async function lockTurn(turnId: string, userId: string): Promise<Turn> {
     throw new TurnStateError(turnId, turn.status, 'the turn changed state concurrently.');
   }
 
-  return toTurn(data);
+  const moderation = await moderateLockedTurn(turnId, turn.storyId);
+
+  if (moderation.verdict === 'block') {
+    const { data: reopened, error: reopenError } = await supabase
+      .from('turns')
+      .update({ status: 'open', moderation_status: 'block', moderation_reason: moderation.reason })
+      .eq('id', turnId)
+      .select(TURN_COLUMNS)
+      .maybeSingle();
+
+    if (reopenError !== null || reopened === null) {
+      throw new Error(`Failed to reopen blocked turn: ${reopenError?.message ?? 'no row returned'}`);
+    }
+
+    throw new TurnBlockedByModerationError(turnId, moderation.reason);
+  }
+
+  const { data: withModeration } = await supabase
+    .from('turns')
+    .update({ moderation_status: moderation.verdict, moderation_reason: moderation.reason })
+    .eq('id', turnId)
+    .select(TURN_COLUMNS)
+    .maybeSingle();
+
+  return toTurn(withModeration ?? data);
+}
+
+/**
+ * Fail-open: a moderator call that errors after its internal retry is
+ * treated as 'flag' rather than blocking the lock — see moderate.ts.
+ */
+async function moderateLockedTurn(turnId: string, storyId: string) {
+  const supabase = createServiceRoleClient();
+  const { data: story, error } = await supabase
+    .from('stories')
+    .select('content_rating, model_config')
+    .eq('id', storyId)
+    .single();
+
+  if (error !== null) {
+    throw new Error(`Failed to read story for moderation: ${error.message}`);
+  }
+
+  return moderateTurnSubmissions(
+    turnId,
+    story.content_rating,
+    story.model_config as ModelConfig | null,
+    storyId,
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -390,6 +528,8 @@ interface StoryContextRow {
   turn_config: unknown;
   universe_id: string | null;
   universe_version: number | null;
+  content_rating: string;
+  conflict_policy: string;
 }
 
 /**
@@ -442,7 +582,10 @@ export async function generateTurn(
       },
       {
         modelConfig: context.modelConfig,
-        systemPrompt: mode.systemPrompt,
+        systemPrompt: mode.systemPrompt({
+          contentRating: context.contentRating,
+          conflictPolicy: context.conflictPolicy,
+        }),
         userPrompt: context.prompt,
         onChunk: (accumulated) => {
           streamed = accumulated;
@@ -538,6 +681,8 @@ interface TurnContext {
   prompt: string;
   entityIds: string[];
   modelConfig: ModelConfig | null;
+  contentRating: string;
+  conflictPolicy: string;
 }
 
 /**
@@ -550,7 +695,9 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
   const [storyResult, entityResult, chapterResult, submissionResult] = await Promise.all([
     supabase
       .from('stories')
-      .select('title, world_ledger, model_config, turn_config, universe_id, universe_version')
+      .select(
+        'title, world_ledger, model_config, turn_config, universe_id, universe_version, content_rating, conflict_policy',
+      )
       .eq('id', turn.storyId)
       .single(),
     supabase
@@ -651,6 +798,8 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
     prompt: assembled.prompt,
     entityIds: entities.filter((entity) => entity.status === 'active').map((entity) => entity.id),
     modelConfig,
+    contentRating: story.content_rating,
+    conflictPolicy: story.conflict_policy,
   };
 }
 

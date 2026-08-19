@@ -8,6 +8,7 @@ import { getUniverseVersion } from '@/lib/engine/universes';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { ClaimButton } from '@/app/stories/[storyId]/entities/claim-button';
 import { NewEntityForm } from '@/app/stories/[storyId]/entities/new-entity-form';
 import { NewSchemaEntityForm } from '@/app/stories/[storyId]/entities/entity-fields/new-schema-entity-form';
 
@@ -72,7 +73,15 @@ export default async function EntitiesPage({
                     <CardTitle>{entity.name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{entity.type}</p>
                   </div>
-                  {entity.status !== 'active' && <Badge variant="secondary">{entity.status}</Badge>}
+                  <div className="flex items-center gap-2">
+                    {entity.status !== 'active' && <Badge variant="secondary">{entity.status}</Badge>}
+                    <ClaimButton
+                      storyId={storyId}
+                      entityId={entity.id}
+                      controlledBy={entity.controlledBy}
+                      currentUserId={user.id}
+                    />
+                  </div>
                 </CardHeader>
               </Card>
             </Link>

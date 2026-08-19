@@ -443,6 +443,7 @@ export type Database = {
       }
       stories: {
         Row: {
+          conflict_policy: string
           content_rating: string
           created_at: string
           current_turn: number
@@ -458,6 +459,7 @@ export type Database = {
           world_ledger: Json
         }
         Insert: {
+          conflict_policy?: string
           content_rating: string
           created_at?: string
           current_turn?: number
@@ -473,6 +475,7 @@ export type Database = {
           world_ledger?: Json
         }
         Update: {
+          conflict_policy?: string
           content_rating?: string
           created_at?: string
           current_turn?: number
@@ -504,6 +507,53 @@ export type Database = {
           },
         ]
       }
+      story_invites: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          max_uses: number | null
+          revoked_at: string | null
+          role: string
+          story_id: string
+          token: string
+          use_count: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at: string
+          id?: string
+          max_uses?: number | null
+          revoked_at?: string | null
+          role: string
+          story_id: string
+          token: string
+          use_count?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          max_uses?: number | null
+          revoked_at?: string | null
+          role?: string
+          story_id?: string
+          token?: string
+          use_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_invites_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       story_members: {
         Row: {
           joined_at: string
@@ -529,6 +579,58 @@ export type Database = {
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_reports: {
+        Row: {
+          chapter_id: string | null
+          created_at: string
+          id: string
+          reason: string
+          reporter_id: string | null
+          story_id: string
+          submission_id: string | null
+        }
+        Insert: {
+          chapter_id?: string | null
+          created_at?: string
+          id?: string
+          reason: string
+          reporter_id?: string | null
+          story_id: string
+          submission_id?: string | null
+        }
+        Update: {
+          chapter_id?: string | null
+          created_at?: string
+          id?: string
+          reason?: string
+          reporter_id?: string | null
+          story_id?: string
+          submission_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_reports_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "story_reports_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "story_reports_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
             referencedColumns: ["id"]
           },
         ]
@@ -599,6 +701,8 @@ export type Database = {
           failure_reason: string | null
           id: string
           mode: string
+          moderation_reason: string | null
+          moderation_status: string | null
           partial_prose: string | null
           scene_setup: string | null
           status: string
@@ -613,6 +717,8 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           mode?: string
+          moderation_reason?: string | null
+          moderation_status?: string | null
           partial_prose?: string | null
           scene_setup?: string | null
           status?: string
@@ -627,6 +733,8 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           mode?: string
+          moderation_reason?: string | null
+          moderation_status?: string | null
           partial_prose?: string | null
           scene_setup?: string | null
           status?: string
@@ -918,6 +1026,7 @@ export type Database = {
               p_turn_config?: Json
             }
             Returns: {
+              conflict_policy: string
               content_rating: string
               created_at: string
               current_turn: number
@@ -950,6 +1059,7 @@ export type Database = {
               p_universe_version?: number
             }
             Returns: {
+              conflict_policy: string
               content_rating: string
               created_at: string
               current_turn: number
@@ -1004,6 +1114,11 @@ export type Database = {
       }
       is_story_member: { Args: { target_story_id: string }; Returns: boolean }
       is_story_owner: { Args: { target_story_id: string }; Returns: boolean }
+      is_story_role: {
+        Args: { roles: string[]; target_story_id: string }
+        Returns: boolean
+      }
+      join_story_via_invite: { Args: { p_token: string }; Returns: string }
       match_arc_summaries: {
         Args: {
           p_match_count?: number
@@ -1038,6 +1153,8 @@ export type Database = {
           failure_reason: string | null
           id: string
           mode: string
+          moderation_reason: string | null
+          moderation_status: string | null
           partial_prose: string | null
           scene_setup: string | null
           status: string
@@ -1148,6 +1265,7 @@ export type Database = {
           p_universe_version: number
         }
         Returns: {
+          conflict_policy: string
           content_rating: string
           created_at: string
           current_turn: number

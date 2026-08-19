@@ -3,12 +3,14 @@ import Link from 'next/link';
 
 import { requireUser } from '@/lib/auth';
 import { listChapters } from '@/lib/engine/chapters';
+import { listEntities } from '@/lib/engine/entities';
 import { isOwner } from '@/lib/engine/membership';
 import { StoryNotFoundError, getStory } from '@/lib/engine/stories';
 import { getLiveTurn, listSubmissionsForTurn } from '@/lib/engine/turns';
 import { getStoryCostUsd } from '@/lib/engine/usage-summary';
 import { ArchiveButton } from '@/app/stories/[storyId]/archive-button';
 import { ModelSettings } from '@/app/stories/[storyId]/model-settings';
+import { ReportChapterButton } from '@/app/stories/[storyId]/report-chapter-button';
 import { RollbackButton } from '@/app/stories/[storyId]/rollback-button';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -33,12 +35,17 @@ export default async function StoryPage({
     throw error;
   }
 
-  const [chapters, liveTurn, costUsd, owner] = await Promise.all([
+  const [chapters, liveTurn, costUsd, owner, entities] = await Promise.all([
     listChapters(storyId, user.id),
     getLiveTurn(storyId, user.id),
     getStoryCostUsd(storyId, user.id),
     isOwner(storyId, user.id),
+    listEntities(storyId, user.id),
   ]);
+
+  const claimedEntityIds = entities
+    .filter((entity) => entity.controlledBy !== null)
+    .map((entity) => entity.id);
 
   const submissions =
     liveTurn !== null ? await listSubmissionsForTurn(liveTurn.id, user.id) : [];
@@ -58,6 +65,9 @@ export default async function StoryPage({
         <div className="flex items-start gap-2">
           <Link href={`/stories/${storyId}/entities`} className={buttonVariants({ variant: 'outline' })}>
             Entities
+          </Link>
+          <Link href={`/stories/${storyId}/members`} className={buttonVariants({ variant: 'outline' })}>
+            Members
           </Link>
           <Link href="/stories" className={buttonVariants({ variant: 'outline' })}>
             All stories
@@ -80,6 +90,7 @@ export default async function StoryPage({
         turn={liveTurn}
         submissions={submissions}
         userId={user.id}
+        claimedEntityIds={claimedEntityIds}
       />
 
       <div className="flex flex-col gap-4">
@@ -106,6 +117,9 @@ export default async function StoryPage({
               <CardContent className="whitespace-pre-wrap text-sm leading-relaxed">
                 {chapter.prose}
               </CardContent>
+              <CardFooter className="flex-col items-start gap-2">
+                <ReportChapterButton chapterId={chapter.id} />
+              </CardFooter>
               {owner && (
                 <CardFooter>
                   <Link
