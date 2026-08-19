@@ -3,9 +3,7 @@
 ## Purpose
 
 Schemaless entity records (`type`, `name`, opaque `data` jsonb) plus the append-only `entity_history` ledger, diff application with conflict detection, and rollback via compensating history rows. When a story has a pinned universe version, `data` is validated against that version's entity schema (see `entity-schema`); otherwise it remains unconstrained as in Phase 1.
-
 ## Requirements
-
 ### Requirement: Schemaless entity records
 An entity SHALL be stored as a type, a name, and an opaque `data` jsonb payload. When the owning story has no pinned universe version, the engine MUST NOT validate, constrain, or interpret the contents of `data`, and MUST NOT define fields specific to any genre, universe, or media type. When the owning story has a pinned universe version, `data` MUST be validated against that version's entity schema for the entity's type (see `entity-schema`), but the engine still MUST NOT branch on which universe, genre, or media type is active — only on the bounded set of schema field types.
 
@@ -26,15 +24,23 @@ An entity SHALL be stored as a type, a name, and an opaque `data` jsonb payload.
 - **THEN** `data` is validated against that version's entity schema for the entity's type before the write is persisted, per the `entity-schema` capability
 
 ### Requirement: Append-only entity history
-Every change to an entity's `data` SHALL write an `entity_history` row recording the diff, the chapter it came from when applicable, and who applied it. History rows MUST NOT be updated or deleted.
+Every change to an entity's `data` SHALL write an `entity_history` row recording the diff, the chapter it came from when applicable, and who applied it. History rows MUST NOT be updated or deleted. A manual edit to an entity MUST be performed by that entity's controller, or by a user holding role `owner` or `gm`; other members MUST be rejected.
 
 #### Scenario: Diff applied from a published chapter
 - **WHEN** an extracted diff is applied to an entity
 - **THEN** the entity's `data` is updated and one `entity_history` row is written referencing the originating chapter
 
-#### Scenario: Manual edit by a user
-- **WHEN** a user edits an entity directly through the UI
+#### Scenario: Manual edit by the controller
+- **WHEN** the user who controls an entity edits it directly through the UI
 - **THEN** an `entity_history` row is written with the acting user and a null chapter reference
+
+#### Scenario: Manual edit by a non-controller rejected
+- **WHEN** a user who neither controls the entity nor holds role `owner` or `gm` attempts to edit it directly
+- **THEN** the system SHALL reject the request
+
+#### Scenario: GM edits any entity
+- **WHEN** a user with role `gm` edits an entity regardless of its `controlled_by`
+- **THEN** the edit succeeds and an `entity_history` row is written with the acting GM as the actor
 
 #### Scenario: History write fails
 - **WHEN** the `entity_history` insert fails
@@ -65,3 +71,4 @@ The system SHALL be able to reverse every diff applied by a given chapter, resto
 #### Scenario: Entity changed after the chapter being rolled back
 - **WHEN** a later chapter or manual edit has since changed a field that the rollback would restore
 - **THEN** the system SHALL surface the conflict for the user to resolve rather than silently overwriting the newer value
+
