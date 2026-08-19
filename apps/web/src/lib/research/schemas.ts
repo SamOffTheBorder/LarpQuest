@@ -96,7 +96,13 @@ export const schemaDerivationResultSchema = z.object({
 
 export type SchemaDerivationResult = z.infer<typeof schemaDerivationResultSchema>;
 
-/** Stage 7 — Rule Pack Generation. Shaped for Part 5.1's validation rule objects. */
+/**
+ * Stage 7 — Rule Pack Generation. Shaped for Part 5.1's validation rule
+ * objects. `applies_when` is optional — absent means the rule applies
+ * regardless of which progression model the universe is running (see
+ * rule-engine spec, "Standard rule pack applies without a research-derived
+ * rule pack" and the `applies` filter in `lib/engine/rules/applicability.ts`).
+ */
 export const rulePackResultSchema = z.object({
   rules: z.array(
     z.object({
@@ -104,6 +110,11 @@ export const rulePackResultSchema = z.object({
       source: z.enum(['engine', 'research', 'user']),
       check: z.string().min(1),
       severity: z.enum(['block', 'warn', 'log']),
+      applies_when: z
+        .object({
+          progression_model_in: z.array(z.string().min(1)).optional(),
+        })
+        .optional(),
     }),
   ),
 });

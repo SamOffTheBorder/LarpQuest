@@ -6,16 +6,22 @@ import { z } from 'zod';
  * Transitions are enforced here and nowhere else, so an invalid one such as
  * `published -> generating` cannot happen from a stray call site.
  *
- *   open -> locked -> generating -> published
- *                          |
- *                          v
- *                       failed -> (retry) -> generating
+ *   open -> locked -> generating -> validating -> published
+ *                          |             |
+ *                          v             v
+ *                       failed <---------+
+ *                          ^             |
+ *                          |             v
+ *                          +---- (retry) generating
  *
  * `failed` is a first-class state, not an error condition: submissions survive
- * it intact and a retry reuses them verbatim.
+ * it intact and a retry reuses them verbatim. `validating` sits between a
+ * finished draft and publication — a block-severity flag sends it back to
+ * `generating` (capped retries, per the `validator-loop` capability) rather
+ * than publishing or failing outright.
  */
 
-export const TURN_STATUSES = ['open', 'locked', 'generating', 'published', 'failed'] as const;
+export const TURN_STATUSES = ['open', 'locked', 'generating', 'validating', 'published', 'failed'] as const;
 
 export type TurnStatus = (typeof TURN_STATUSES)[number];
 
@@ -24,7 +30,8 @@ export const turnStatusSchema = z.enum(TURN_STATUSES);
 const TRANSITIONS: Record<TurnStatus, readonly TurnStatus[]> = {
   open: ['locked'],
   locked: ['generating'],
-  generating: ['published', 'failed'],
+  generating: ['validating', 'failed'],
+  validating: ['published', 'generating', 'failed'],
   failed: ['generating'],
   published: [],
 };

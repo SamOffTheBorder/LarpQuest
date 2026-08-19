@@ -38,6 +38,10 @@ export const universeVersionInputSchema = z.object({
    * needs neither. */
   canonBible: z.record(z.string(), z.unknown()).optional(),
   contextPolicy: contextPolicySchema.optional(),
+  /** Stage 7 research-derived validation rules (rule-engine capability).
+   * Optional — a universe created without research, or before Phase 6, runs
+   * the engine-provided Standard Rule Pack only. */
+  validationRules: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
 export type UniverseVersionInput = z.infer<typeof universeVersionInputSchema>;
@@ -52,6 +56,7 @@ export interface UniverseVersion {
   contextPolicy: ContextPolicy;
   canonBibleSummary: Record<string, unknown> | null;
   canonBibleRulesOnly: Record<string, unknown> | null;
+  validationRules: Record<string, unknown>[];
   publishedAt: string;
 }
 
@@ -65,6 +70,7 @@ interface UniverseVersionRow {
   context_policy: unknown;
   canon_bible_summary: unknown;
   canon_bible_rules_only: unknown;
+  validation_rules: unknown;
   published_at: string;
 }
 
@@ -81,6 +87,7 @@ function toUniverseVersion(row: UniverseVersionRow): UniverseVersion {
     contextPolicy: (row.context_policy ?? DEFAULT_CONTEXT_POLICY) as ContextPolicy,
     canonBibleSummary: (row.canon_bible_summary ?? null) as Record<string, unknown> | null,
     canonBibleRulesOnly: (row.canon_bible_rules_only ?? null) as Record<string, unknown> | null,
+    validationRules: (row.validation_rules ?? []) as Record<string, unknown>[],
     publishedAt: row.published_at,
   };
 }
@@ -215,6 +222,7 @@ export async function createUniverse(
     p_context_policy: toJson(contextPolicy),
     p_canon_bible_summary: toJson(summary),
     p_canon_bible_rules_only: toJson(rulesOnly),
+    p_validation_rules: toJson(parsed.validationRules ?? []),
   });
 
   if (error !== null || data === null) {
@@ -250,6 +258,7 @@ export async function publishUniverseVersion(
     p_context_policy: toJson(contextPolicy),
     p_canon_bible_summary: toJson(summary),
     p_canon_bible_rules_only: toJson(rulesOnly),
+    p_validation_rules: toJson(parsed.validationRules ?? []),
   });
 
   if (error !== null || data === null) {
@@ -285,7 +294,7 @@ export async function getUniverseVersion(
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('universe_versions')
-    .select('id, universe_id, version, entity_schema, progression_model, progression_config, context_policy, canon_bible_summary, canon_bible_rules_only, published_at')
+    .select('id, universe_id, version, entity_schema, progression_model, progression_config, context_policy, canon_bible_summary, canon_bible_rules_only, validation_rules, published_at')
     .eq('universe_id', universeId)
     .eq('version', version)
     .maybeSingle();
@@ -306,7 +315,7 @@ export async function getLatestUniverseVersion(universeId: string): Promise<Univ
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('universe_versions')
-    .select('id, universe_id, version, entity_schema, progression_model, progression_config, context_policy, canon_bible_summary, canon_bible_rules_only, published_at')
+    .select('id, universe_id, version, entity_schema, progression_model, progression_config, context_policy, canon_bible_summary, canon_bible_rules_only, validation_rules, published_at')
     .eq('universe_id', universeId)
     .order('version', { ascending: false })
     .limit(1)

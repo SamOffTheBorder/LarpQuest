@@ -15,12 +15,28 @@ describe('turn state machine', () => {
   it('permits the documented happy path', () => {
     expect(canTransition('open', 'locked')).toBe(true);
     expect(canTransition('locked', 'generating')).toBe(true);
-    expect(canTransition('generating', 'published')).toBe(true);
+    expect(canTransition('generating', 'validating')).toBe(true);
+    expect(canTransition('validating', 'published')).toBe(true);
   });
 
   it('permits failure and retry', () => {
     expect(canTransition('generating', 'failed')).toBe(true);
     expect(canTransition('failed', 'generating')).toBe(true);
+  });
+
+  it('permits validation to retry generation or escalate to failed', () => {
+    expect(canTransition('validating', 'generating')).toBe(true);
+    expect(canTransition('validating', 'failed')).toBe(true);
+  });
+
+  it('rejects publishing without passing through validation', () => {
+    expect(canTransition('generating', 'published')).toBe(false);
+  });
+
+  it('rejects validating out of order', () => {
+    expect(canTransition('open', 'validating')).toBe(false);
+    expect(canTransition('locked', 'validating')).toBe(false);
+    expect(canTransition('published', 'validating')).toBe(false);
   });
 
   it('rejects transitions out of the terminal published state', () => {
@@ -52,6 +68,7 @@ describe('turn state machine', () => {
   it('treats every non-published status as live', () => {
     // A story may not open a new turn while one is live.
     expect(isLive('open')).toBe(true);
+    expect(isLive('validating')).toBe(true);
     expect(isLive('failed')).toBe(true);
     expect(isLive('published')).toBe(false);
   });

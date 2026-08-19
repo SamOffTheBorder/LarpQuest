@@ -16,6 +16,11 @@
 export interface TurnModeStoryContext {
   contentRating: string;
   conflictPolicy: string;
+  /** Gatekeeper rulings for this turn's proposals, pre-formatted as prose
+   * lines. Empty when no submission this turn carried a proposal — see the
+   * gatekeeper capability. Never a branch on genre or universe; this is
+   * per-turn data, not a policy-value lookup like the other two fields. */
+  gatekeeperRulings?: string[];
 }
 
 export interface TurnMode {
@@ -56,7 +61,7 @@ function freeformSystemPrompt(story: TurnModeStoryContext): string {
   const contentInstruction = CONTENT_RATING_INSTRUCTIONS[story.contentRating] ?? DEFAULT_CONTENT_RATING_INSTRUCTION;
   const conflictInstruction = CONFLICT_POLICY_INSTRUCTIONS[story.conflictPolicy] ?? DEFAULT_CONFLICT_POLICY_INSTRUCTION;
 
-  return [
+  const lines = [
     'You are the narrator of a collaborative story.',
     '',
     'You will be given the current world state, recent events, and what each',
@@ -72,7 +77,23 @@ function freeformSystemPrompt(story: TurnModeStoryContext): string {
     '- Do not resolve anything that belongs to a player not in this turn.',
     `- ${contentInstruction}`,
     `- ${conflictInstruction}`,
-  ].join('\n');
+  ];
+
+  if (story.gatekeeperRulings !== undefined && story.gatekeeperRulings.length > 0) {
+    lines.push(
+      '',
+      'One or more players proposed something new this turn (a capability, an',
+      'alliance, a plot development). The Gatekeeper has already ruled on each —',
+      'reflect its ruling in the prose. A "reject" means the attempt fails or is',
+      'refused in-fiction; "allow_with_limits" means it manifests only within',
+      'the stated limits; do not let a rejected or limited proposal simply',
+      'succeed as originally asked.',
+      '',
+      ...story.gatekeeperRulings,
+    );
+  }
+
+  return lines.join('\n');
 }
 
 const FREEFORM: TurnMode = {

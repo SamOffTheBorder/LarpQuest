@@ -61,13 +61,14 @@ create table universe_versions (
   context_policy jsonb not null default '{...}',      -- Phase 4, defaulted
   canon_bible_summary jsonb,                            -- Phase 4, nullable
   canon_bible_rules_only jsonb,                         -- Phase 4, nullable
+  validation_rules jsonb not null default '[]',         -- Phase 6: Stage 7 rule pack
   published_at timestamptz default now(),
   created_at timestamptz default now(),
   unique (universe_id, version)
 );
 ```
 
-No `classification`, `canon_bible` (the full, uncompressed jsonb the future shape sketches), `validation_rules`, `turn_modes`, `research_gaps`, or `is_public` yet — those arrive with the phases that produce or consume them. `progression_model` is singular (Phase 2 registers `none` and `ability_unlock`; a universe picks one), not the `progression_models text[]` the future shape anticipates for universes composing several. `context_policy` and the two compressed canon-bible columns arrived in Phase 4 — see [Memory & Context](/architecture/memory-and-context#context-policy) — generated synchronously at publish, from an optional `canonBible` input that `research/publish.ts` does not yet supply (research-created universes currently publish with null compressed variants; wiring the draft's rules/entities/timeline/rule-pack sections into that input is unscoped work, not a Phase 4 gap). See [Universe Versioning](/architecture/universe-versioning) for why versions are separate immutable rows.
+No `classification`, `canon_bible` (the full, uncompressed jsonb the future shape sketches), `turn_modes`, `research_gaps`, or `is_public` yet — those arrive with the phases that produce or consume them. `progression_model` is singular (Phase 2 registers `none` and `ability_unlock`; a universe picks one), not the `progression_models text[]` the future shape anticipates for universes composing several. `context_policy` and the two compressed canon-bible columns arrived in Phase 4 — see [Memory & Context](/architecture/memory-and-context#context-policy) — generated synchronously at publish, from an optional `canonBible` input that `research/publish.ts` does not yet supply (research-created universes currently publish with null compressed variants; wiring the draft's rules/entities/timeline sections into that input remains unscoped). `validation_rules` arrived in Phase 6 — unlike `canonBible`, `research/publish.ts` **does** wire this one through: an accepted-or-edited rule-pack draft section maps directly into it, since the rule engine needs it to evaluate anything beyond the Standard Rule Pack. `create_universe_with_version`/`publish_universe_version` gained a `p_validation_rules` parameter — dropped and recreated, since `create or replace` cannot change a parameter list. See [Universe Versioning](/architecture/universe-versioning) for why versions are separate immutable rows.
 
 ## Research drafts
 
@@ -210,7 +211,7 @@ create table chapters (
   embedding vector(1536),           -- Phase 4
   entity_ids uuid[],
   extracted_diffs jsonb,
-  validation_report jsonb,          -- Phase 6
+  validation_report jsonb,          -- Phase 6: flags from evaluateRules, empty array means "evaluated, clean," null means unevaluated (pre-Phase-6)
   image_prompts jsonb,              -- Phase 8
   extraction_status text not null default 'pending',  -- Phase 1
   memory_status text not null default 'pending',       -- Phase 4
@@ -251,7 +252,7 @@ create table turns (
   turn_number int not null,
   mode text not null,
   scene_setup text,
-  status text default 'open',         -- open|locked|generating|published|failed
+  status text default 'open',         -- open|locked|generating|validating|published|failed (Phase 6 added validating)
   deadline timestamptz,               -- unused until Phase 5's deadline sweep
   moderation_status text,             -- Phase 5: pass|flag|block
   moderation_reason text,             -- Phase 5
@@ -264,7 +265,7 @@ create table submissions (
   entity_id uuid references entities(id),
   user_id uuid references auth.users,
   content text not null,
-  proposals jsonb,                    -- new capabilities etc.
+  proposals jsonb,                    -- Phase 6: {text: string} when the player submitted a proposal; the submissionInputSchema field is `proposal`, singular
   submitted_at timestamptz default now()
 );
 ```
@@ -279,26 +280,30 @@ Submissions are a **separate table from generation state** by design. No generat
 create table proposals (
   id uuid primary key default gen_random_uuid(),
   story_id uuid references stories(id) on delete cascade,
-  entity_id uuid references entities(id),
+  entity_id uuid references entities(id) on delete set null,
   proposal text not null,
-  verdict text,
+  verdict text check (verdict in ('allow', 'allow_with_limits', 'reject')),
   reasoning text,
   imposed_limits jsonb,
-  gm_override boolean default false,
-  created_at timestamptz default now()
+  suggested_alternative text,
+  narrative_cost text,
+  gm_override boolean not null default false,
+  created_at timestamptz not null default now()
 );
 
 create table canon_exceptions (
   id uuid primary key default gen_random_uuid(),
   story_id uuid references stories(id) on delete cascade,
   rule_id text not null,
+  entity_id uuid references entities(id) on delete cascade,
+  capability_id text,
   exception_note text not null,
   created_by uuid references auth.users,
-  created_at timestamptz default now()
+  created_at timestamptz not null default now()
 );
 ```
 
-`canon_exceptions` is what makes a [GM override permanent](/architecture/validation-gatekeeping#gm-override-writes-to-canon).
+`entity_id`/`capability_id` on `canon_exceptions` are a superset of the build plan's minimal `rule_id` + `exception_note` sketch — both null is still a valid row and means "suppress this rule for the whole story," which is also how a universe disables one Standard Rule Pack rule entirely. `canon_exceptions` is what makes a [GM override permanent](/architecture/validation-gatekeeping#gm-override-writes-to-canon); `proposals` rows are written by the Gatekeeper (service-role only — no client insert policy) and only ever gain `gm_override = true` afterward, never a changed `verdict`/`reasoning`.
 
 ## Keys and usage
 
@@ -345,11 +350,12 @@ Phase 4 added: the `vector` extension (in a dedicated `extensions` schema, not `
 
 Phase 5 added: `story_invites`, `story_reports`, `stories.conflict_policy`, `turns.moderation_status`/`moderation_reason`. New RPCs: `join_story_via_invite`; new policy helper `is_story_role` (mirrors `is_story_owner`'s shape, both revoked from direct client execution). `entities_update` and `story_members_delete` RLS policies were narrowed (dropped and recreated) rather than replaced with new tables.
 
+Phase 6 added: `proposals`, `canon_exceptions`, `universe_versions.validation_rules`. `turns.status` check constraint widened to add `'validating'`. `chapters.validation_report` (present since Phase 1, unpopulated) is now written on every publish. `publish_chapter` was dropped and recreated — its guard moved from `generating` to `validating`, and it gained a `p_validation_report` parameter. `create_universe_with_version`/`publish_universe_version` gained a `p_validation_rules` parameter, dropped and recreated for the same "can't change a parameter list" reason as Phase 4's canon-bible params.
+
 Still deferred, so later migrations are explicit about introducing them:
 
 | Object | Arrives in |
 |---|---|
-| `proposals`, `canon_exceptions`, `validation_report` (populated) | Phase 6 |
 | `universes.is_public`, `forked_from` (marketplace), `image_prompts` (populated) | Phase 8 |
 
 Phase 1 adds one table not in the original plan — `extraction_queue`, with a claim timestamp and attempt count — because extraction runs after publication and needs stale-claim recovery. Phase 3 introduces Inngest for the research pipeline's genuinely multi-step orchestration, but does **not** migrate `extraction_queue` onto it — that queue's one-shot retryable job has no orchestration need Inngest would improve on, so it keeps its existing claim/update shape. Phase 4 follows the same precedent for `memory_queue`: a new independent job kind gets its own table, not a type column on `extraction_queue`.

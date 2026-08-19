@@ -33,10 +33,31 @@ const FORBIDDEN_PATTERNS: RegExp[] = [
 // for everywhere else.
 const EXCLUDED = new Set(['test-universes.ts']);
 
+/**
+ * Recurses one level into subdirectories (e.g. `rules/`) so newly added
+ * modules like the Standard Rule Pack are covered without needing this test
+ * updated for every future subfolder — non-.ts entries and further nesting
+ * are simply skipped rather than erroring.
+ */
 function engineSourceFiles(): string[] {
-  return readdirSync(ENGINE_DIR)
-    .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts') && !EXCLUDED.has(name))
-    .map((name) => join(ENGINE_DIR, name));
+  const files: string[] = [];
+
+  for (const entry of readdirSync(ENGINE_DIR, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      for (const nested of readdirSync(join(ENGINE_DIR, entry.name))) {
+        if (nested.endsWith('.ts') && !nested.endsWith('.test.ts')) {
+          files.push(join(ENGINE_DIR, entry.name, nested));
+        }
+      }
+      continue;
+    }
+
+    if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') && !EXCLUDED.has(entry.name)) {
+      files.push(join(ENGINE_DIR, entry.name));
+    }
+  }
+
+  return files;
 }
 
 describe('engine code stays genre-agnostic', () => {

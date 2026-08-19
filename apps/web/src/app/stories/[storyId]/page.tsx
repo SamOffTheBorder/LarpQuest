@@ -69,6 +69,9 @@ export default async function StoryPage({
           <Link href={`/stories/${storyId}/members`} className={buttonVariants({ variant: 'outline' })}>
             Members
           </Link>
+          <Link href={`/stories/${storyId}/consistency`} className={buttonVariants({ variant: 'outline' })}>
+            Consistency
+          </Link>
           <Link href="/stories" className={buttonVariants({ variant: 'outline' })}>
             All stories
           </Link>

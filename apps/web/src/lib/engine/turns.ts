@@ -12,14 +12,24 @@ import {
   type ContextEntity,
   type ContextPolicy,
 } from '@/lib/engine/context';
+import { evaluateProposal } from '@/lib/engine/gatekeeper';
 import { assertMember, requireRole } from '@/lib/engine/membership';
+import { DEFAULT_PROGRESSION_MODEL } from '@/lib/engine/progression-models';
+import { ruleSchema, type CanonException, type Rule } from '@/lib/engine/rules/types';
 import { DEFAULT_TURN_MODE, resolveTurnMode } from '@/lib/engine/turn-modes';
 import { acceptsSubmissions, assertTransition, type TurnStatus } from '@/lib/engine/turn-state';
+import {
+  buildBlockRetryAddendum,
+  loadCanonExceptions,
+  runValidation,
+  toValidationReportJson,
+} from '@/lib/engine/validator';
 import type { ContextPolicy as StoredContextPolicy } from '@/lib/memory/schemas';
 import { retrieveRelevantSummaries } from '@/lib/memory/retrieval';
 import { moderateTurnSubmissions } from '@/lib/moderation/moderate';
 import { serverEnv } from '@/lib/env';
 import { createServiceRoleClient } from '@/lib/supabase/server';
+import { toJson } from '@/lib/supabase/json';
 
 /**
  * The turn loop.
@@ -263,6 +273,11 @@ export async function getTurn(turnId: string, userId: string): Promise<Turn> {
 export const submissionInputSchema = z.object({
   content: z.string().trim().min(1, 'A submission cannot be empty.'),
   entityId: z.string().uuid().nullable().default(null),
+  /** A request for something new — a capability, an alliance, a plot
+   * development — the submitting entity does not yet have (build plan 5.4).
+   * Optional: most submissions are plain action/dialogue with no proposal.
+   * Evaluated by the Gatekeeper capability before the Narrator runs. */
+  proposal: z.string().trim().min(1).nullable().optional(),
 });
 
 export type SubmissionInput = z.infer<typeof submissionInputSchema>;
@@ -273,6 +288,31 @@ export interface Submission {
   userId: string;
   entityId: string | null;
   content: string;
+  proposal: string | null;
+}
+
+interface SubmissionRow {
+  id: string;
+  turn_id: string;
+  user_id: string;
+  entity_id: string | null;
+  content: string;
+  proposals: unknown;
+}
+
+/** proposals is opaque jsonb, written only as {text: string} by this module. */
+function toSubmission(row: SubmissionRow): Submission {
+  const proposals = row.proposals as { text?: unknown } | null;
+  const proposal = typeof proposals?.text === 'string' ? proposals.text : null;
+
+  return {
+    id: row.id,
+    turnId: row.turn_id,
+    userId: row.user_id,
+    entityId: row.entity_id,
+    content: row.content,
+    proposal,
+  };
 }
 
 /** Create a submission. Rejected unless the turn is open. */
@@ -300,21 +340,16 @@ export async function createSubmission(
       user_id: userId,
       entity_id: parsed.entityId,
       content: parsed.content,
+      proposals: parsed.proposal === null || parsed.proposal === undefined ? null : toJson({ text: parsed.proposal }),
     })
-    .select('id, turn_id, user_id, entity_id, content')
+    .select('id, turn_id, user_id, entity_id, content, proposals')
     .single();
 
   if (error !== null) {
     throw new Error(`Failed to create submission: ${error.message}`);
   }
 
-  return {
-    id: data.id,
-    turnId: data.turn_id,
-    userId: data.user_id,
-    entityId: data.entity_id,
-    content: data.content,
-  };
+  return toSubmission(data);
 }
 
 /** Edit a submission. Only its author, and only while the turn is open. */
@@ -352,22 +387,20 @@ export async function updateSubmission(
 
   const { data, error } = await supabase
     .from('submissions')
-    .update({ content: parsed.content, entity_id: parsed.entityId })
+    .update({
+      content: parsed.content,
+      entity_id: parsed.entityId,
+      proposals: parsed.proposal === null || parsed.proposal === undefined ? null : toJson({ text: parsed.proposal }),
+    })
     .eq('id', submissionId)
-    .select('id, turn_id, user_id, entity_id, content')
+    .select('id, turn_id, user_id, entity_id, content, proposals')
     .single();
 
   if (error !== null) {
     throw new Error(`Failed to update submission: ${error.message}`);
   }
 
-  return {
-    id: data.id,
-    turnId: data.turn_id,
-    userId: data.user_id,
-    entityId: data.entity_id,
-    content: data.content,
-  };
+  return toSubmission(data);
 }
 
 /** All submissions for a turn, in submission order. */
@@ -381,7 +414,7 @@ export async function listSubmissionsForTurn(
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('submissions')
-    .select('id, turn_id, user_id, entity_id, content')
+    .select('id, turn_id, user_id, entity_id, content, proposals')
     .eq('turn_id', turnId)
     .order('submitted_at');
 
@@ -389,13 +422,7 @@ export async function listSubmissionsForTurn(
     throw new Error(`Failed to list submissions: ${error.message}`);
   }
 
-  return data.map((row) => ({
-    id: row.id,
-    turnId: row.turn_id,
-    userId: row.user_id,
-    entityId: row.entity_id,
-    content: row.content,
-  }));
+  return data.map(toSubmission);
 }
 
 /* ------------------------------------------------------------------ *
@@ -533,11 +560,17 @@ interface StoryContextRow {
 }
 
 /**
- * Generate and publish a chapter for a locked (or failed, on retry) turn.
+ * Generate, validate, and publish a chapter for a locked (or failed, on
+ * retry) turn.
  *
- * On any failure the turn moves to `failed` with whatever prose was streamed
- * retained in `partial_prose`. Submissions are never touched, so a retry
- * reuses them verbatim.
+ * A block-severity validation flag (validator-loop capability) regenerates
+ * automatically within this same call, up to 2 retries, with the violation
+ * appended to the next attempt's prompt — the caller sees this as a second
+ * round of streamed chunks, not a new request. On any failure — generation
+ * error, validator/gatekeeper call failure, or block-retry exhaustion — the
+ * turn moves to `failed` with whatever prose was last streamed retained in
+ * `partial_prose`. Submissions are never touched, so a retry reuses them
+ * verbatim.
  */
 export async function generateTurn(
   turnId: string,
@@ -570,57 +603,122 @@ export async function generateTurn(
   }
 
   let streamed = '';
+  let attemptCount = toTurn(claimed).attemptCount;
+  let promptAddendum: string | null = null;
 
   try {
     const context = await buildTurnContext(turn);
     const mode = resolveTurnMode(turn.mode);
+    const canonExceptions = await loadCanonExceptions(turn.storyId);
 
-    const result = await streamNarration(
-      {
-        apiKey: serverEnv().OPENROUTER_API_KEY,
-        usage: createUsageRecorder(turn.storyId, userId),
-      },
-      {
-        modelConfig: context.modelConfig,
-        systemPrompt: mode.systemPrompt({
-          contentRating: context.contentRating,
-          conflictPolicy: context.conflictPolicy,
-        }),
-        userPrompt: context.prompt,
-        onChunk: (accumulated) => {
-          streamed = accumulated;
-          onChunk?.(accumulated);
+    // Runs once, before the first Narrator attempt — not re-run on a
+    // block-severity retry, since the proposal itself hasn't changed between
+    // attempts (design.md Decision 4: the ruling must be in the Narrator's
+    // hands before it writes, for either attempt).
+    const gatekeeperRulings = await evaluateTurnProposals(turn.storyId, context, canonExceptions, userId);
+
+    for (;;) {
+      const result = await streamNarration(
+        {
+          apiKey: serverEnv().OPENROUTER_API_KEY,
+          usage: createUsageRecorder(turn.storyId, userId),
         },
-      },
-    );
-
-    streamed = result.prose;
-
-    if (!result.completed || result.prose.trim().length === 0) {
-      throw new Error(
-        result.prose.trim().length === 0
-          ? 'The narrator returned no prose.'
-          : 'The narration stream ended before completing.',
+        {
+          modelConfig: context.modelConfig,
+          systemPrompt: mode.systemPrompt({
+            contentRating: context.contentRating,
+            conflictPolicy: context.conflictPolicy,
+            gatekeeperRulings,
+          }),
+          userPrompt: promptAddendum === null ? context.prompt : `${context.prompt}\n\n${promptAddendum}`,
+          onChunk: (accumulated) => {
+            streamed = accumulated;
+            onChunk?.(accumulated);
+          },
+        },
       );
+
+      streamed = result.prose;
+
+      if (!result.completed || result.prose.trim().length === 0) {
+        throw new Error(
+          result.prose.trim().length === 0
+            ? 'The narrator returned no prose.'
+            : 'The narration stream ended before completing.',
+        );
+      }
+
+      // generating -> validating: the draft is complete, but not yet publishable.
+      const { error: validatingError } = await supabase
+        .from('turns')
+        .update({ status: 'validating' })
+        .eq('id', turnId)
+        .eq('status', 'generating');
+
+      if (validatingError !== null) {
+        throw new Error(`Failed to enter validation: ${validatingError.message}`);
+      }
+
+      const outcome = await runValidation({
+        storyId: turn.storyId,
+        chapterDraft: result.prose,
+        attemptCount,
+        progressionModel: context.progressionModel,
+        researchRules: context.validationRules,
+        entities: context.entities,
+        canonExceptions,
+        modelConfig: context.modelConfig,
+        userId,
+      });
+
+      if (outcome.action === 'publish') {
+        const { data: published, error: publishError } = await supabase.rpc('publish_chapter', {
+          p_turn_id: turnId,
+          p_prose: result.prose,
+          p_entity_ids: context.entityIds,
+          p_validation_report: toValidationReportJson(outcome.flags),
+        });
+
+        if (publishError !== null || published === null) {
+          throw new Error(publishError?.message ?? 'publish returned no row');
+        }
+
+        const chapter = published as unknown as { id: string; turn_number: number };
+
+        return {
+          chapterId: chapter.id,
+          prose: result.prose,
+          turnNumber: chapter.turn_number,
+        };
+      }
+
+      if (outcome.action === 'fail') {
+        throw new Error(
+          `Validation blocked publication after retries: ${outcome.blockingRuleIds.join(', ')}`,
+        );
+      }
+
+      // outcome.action === 'retry': validating -> generating, try again with
+      // the violation appended to the prompt. Reuses the failed -> generating
+      // transition shape (this is a retry within the same call, not a new
+      // one), with attempt_count already incremented for the draft that just
+      // got blocked.
+      promptAddendum = buildBlockRetryAddendum(outcome.flags);
+
+      const { data: retried, error: retryError } = await supabase
+        .from('turns')
+        .update({ status: 'generating', attempt_count: attemptCount + 1 })
+        .eq('id', turnId)
+        .eq('status', 'validating')
+        .select(TURN_COLUMNS)
+        .maybeSingle();
+
+      if (retryError !== null || retried === null) {
+        throw new Error(retryError?.message ?? 'Failed to restart generation after a block-severity flag.');
+      }
+
+      attemptCount = toTurn(retried).attemptCount;
     }
-
-    const { data: published, error: publishError } = await supabase.rpc('publish_chapter', {
-      p_turn_id: turnId,
-      p_prose: result.prose,
-      p_entity_ids: context.entityIds,
-    });
-
-    if (publishError !== null || published === null) {
-      throw new Error(publishError?.message ?? 'publish returned no row');
-    }
-
-    const chapter = published as unknown as { id: string; turn_number: number };
-
-    return {
-      chapterId: chapter.id,
-      prose: result.prose,
-      turnNumber: chapter.turn_number,
-    };
   } catch (cause) {
     await markTurnFailed(turnId, streamed, cause);
     throw cause;
@@ -680,9 +778,64 @@ export async function retryTurn(
 interface TurnContext {
   prompt: string;
   entityIds: string[];
+  entities: ContextEntity[];
   modelConfig: ModelConfig | null;
   contentRating: string;
   conflictPolicy: string;
+  progressionModel: string;
+  validationRules: Rule[];
+  proposalSubmissions: { entityId: string | null; proposal: string }[];
+}
+
+/**
+ * Evaluate every proposal submitted this turn through the Gatekeeper
+ * (gatekeeper capability) and return the rulings as prose lines for the
+ * Narrator prompt. A proposal whose Gatekeeper call fails after its own
+ * retry propagates — a proposal that could not be ruled on must not reach
+ * the Narrator un-adjudicated (gatekeeper spec, "Retry exhaustion raises
+ * typed error and turn fails").
+ */
+async function evaluateTurnProposals(
+  storyId: string,
+  context: TurnContext,
+  canonExceptions: CanonException[],
+  userId: string,
+): Promise<string[]> {
+  if (context.proposalSubmissions.length === 0) {
+    return [];
+  }
+
+  const universeRulesText = JSON.stringify(context.validationRules);
+  const entityById = new Map(context.entities.map((entity) => [entity.id, entity]));
+
+  const rulings: string[] = [];
+
+  for (const submission of context.proposalSubmissions) {
+    const entity = submission.entityId === null ? null : (entityById.get(submission.entityId) ?? null);
+
+    const { verdict } = await evaluateProposal({
+      storyId,
+      entityId: submission.entityId,
+      proposal: submission.proposal,
+      progressionModel: context.progressionModel,
+      universeRulesText,
+      entity,
+      canonExceptions,
+      modelConfig: context.modelConfig,
+      usage: createUsageRecorder(storyId, userId),
+    });
+
+    const entityLabel = entity?.name ?? '(unclaimed entity)';
+    const limits = verdict.imposed_limits !== undefined && verdict.imposed_limits.length > 0
+      ? ` Limits: ${verdict.imposed_limits.join('; ')}.`
+      : '';
+
+    rulings.push(
+      `- ${entityLabel} proposed: "${submission.proposal}" — verdict: ${verdict.verdict}. ${verdict.reasoning}${limits}`,
+    );
+  }
+
+  return rulings;
 }
 
 /**
@@ -712,7 +865,7 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
       .limit(5),
     supabase
       .from('submissions')
-      .select('content, entity_id')
+      .select('content, entity_id, proposals')
       .eq('turn_id', turn.id)
       .order('submitted_at'),
   ]);
@@ -755,10 +908,19 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
     content: row.content,
   }));
 
+  const proposalSubmissions: { entityId: string | null; proposal: string }[] = submissionResult.data
+    .map((row) => {
+      const proposals = row.proposals as { text?: unknown } | null;
+      return typeof proposals?.text === 'string'
+        ? { entityId: row.entity_id, proposal: proposals.text }
+        : null;
+    })
+    .filter((value): value is { entityId: string | null; proposal: string } => value !== null);
+
   const toneDirectives = readToneDirectives(story.turn_config);
   const modelConfig = (story.model_config ?? null) as ModelConfig | null;
 
-  const { contextPolicy, canonBibleText } = await resolveUniverseContext(
+  const { contextPolicy, canonBibleText, progressionModel, validationRules } = await resolveUniverseContext(
     story.universe_id,
     story.universe_version,
   );
@@ -797,9 +959,13 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
   return {
     prompt: assembled.prompt,
     entityIds: entities.filter((entity) => entity.status === 'active').map((entity) => entity.id),
+    entities,
     modelConfig,
     contentRating: story.content_rating,
     conflictPolicy: story.conflict_policy,
+    progressionModel,
+    validationRules,
+    proposalSubmissions,
   };
 }
 
@@ -817,33 +983,47 @@ function readToneDirectives(turnConfig: unknown): string | null {
 interface UniverseContext {
   contextPolicy: ContextPolicy;
   canonBibleText: string | null;
+  progressionModel: string;
+  validationRules: Rule[];
 }
 
 /**
- * Resolve the story's pinned universe version's context policy and
- * compressed canon bible text. An unpinned story (no universe, or one
- * created before Phase 2) gets the documented default policy and no canon
- * bible — exactly Phase 1 behavior, per context-assembly spec's "Story
- * without a pinned universe version uses default policy."
+ * Resolve the story's pinned universe version's context policy, compressed
+ * canon bible text, progression model, and validation rules. An unpinned
+ * story (no universe, or one created before Phase 2) gets the documented
+ * default policy, no canon bible, the `none` progression model, and no
+ * research-derived rules (the Standard Rule Pack still applies — see
+ * rule-engine.ts) — exactly Phase 1 behavior, per context-assembly spec's
+ * "Story without a pinned universe version uses default policy."
  */
 async function resolveUniverseContext(
   universeId: string | null | undefined,
   universeVersion: number | null | undefined,
 ): Promise<UniverseContext> {
   if (universeId === null || universeId === undefined || universeVersion === null || universeVersion === undefined) {
-    return { contextPolicy: ENGINE_DEFAULT_CONTEXT_POLICY, canonBibleText: null };
+    return {
+      contextPolicy: ENGINE_DEFAULT_CONTEXT_POLICY,
+      canonBibleText: null,
+      progressionModel: DEFAULT_PROGRESSION_MODEL,
+      validationRules: [],
+    };
   }
 
   const supabase = createServiceRoleClient();
   const { data } = await supabase
     .from('universe_versions')
-    .select('context_policy, canon_bible_summary, canon_bible_rules_only')
+    .select('context_policy, canon_bible_summary, canon_bible_rules_only, progression_model, validation_rules')
     .eq('universe_id', universeId)
     .eq('version', universeVersion)
     .maybeSingle();
 
   if (data === null) {
-    return { contextPolicy: ENGINE_DEFAULT_CONTEXT_POLICY, canonBibleText: null };
+    return {
+      contextPolicy: ENGINE_DEFAULT_CONTEXT_POLICY,
+      canonBibleText: null,
+      progressionModel: DEFAULT_PROGRESSION_MODEL,
+      validationRules: [],
+    };
   }
 
   const stored = data.context_policy as StoredContextPolicy | null;
@@ -861,7 +1041,22 @@ async function resolveUniverseContext(
     data.canon_bible_rules_only,
   );
 
-  return { contextPolicy, canonBibleText };
+  const validationRules = parseValidationRules(data.validation_rules);
+
+  return { contextPolicy, canonBibleText, progressionModel: data.progression_model, validationRules };
+}
+
+/** universe_versions.validation_rules is opaque jsonb, written only through
+ * universes.ts's universeVersionInputSchema — parse defensively rather than
+ * casting, so a malformed row degrades to "no research rules" instead of
+ * throwing mid-generation. */
+function parseValidationRules(value: unknown): Rule[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const parsed = z.array(ruleSchema).safeParse(value);
+  return parsed.success ? parsed.data : [];
 }
 
 /** No `full` variant is stored separately — `canon_compression: 'full'` means

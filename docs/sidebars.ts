@@ -32,6 +32,7 @@ const sidebars: SidebarsConfig = {
         'phases/phase-3-research-pipeline',
         'phases/phase-4-memory',
         'phases/phase-5-multiplayer',
+        'phases/phase-6-validation-gatekeeping',
         'phases/getting-started',
       ],
     },

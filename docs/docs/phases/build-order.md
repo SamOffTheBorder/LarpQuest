@@ -16,7 +16,7 @@ Each phase depends on the last. The ordering is not a preference — it is a dep
 | [3](/phases/phase-3-research-pipeline) | Research Pipeline | ~3 weeks |
 | [4](/phases/phase-4-memory) | Memory | ~2 weeks |
 | [5](/phases/phase-5-multiplayer) | Multiplayer | ~3 weeks |
-| 6 | Validation & Gatekeeping | ~2 weeks |
+| [6](/phases/phase-6-validation-gatekeeping) | Validation & Gatekeeping | ~2 weeks |
 | 7 | Turn Modes | ~2 weeks |
 | 8 | Polish | — |
 
@@ -102,11 +102,11 @@ Multiplayer means people who do not know each other:
 
 ## Phase 6 — Validation & Gatekeeping
 
-Rule engine with severity levels. Validator loop with retry and escalation. Gatekeeper for proposals. GM override writing canon exceptions. Consistency report view.
+**Status: implemented.** Rule engine with severity levels. Validator loop with retry and escalation. Gatekeeper for proposals. GM override writing canon exceptions. Consistency report view.
 
 **Exit criteria:** A player proposing an unearned power gets a reasoned in-universe rejection.
 
-→ [Validation & Gatekeeping](/architecture/validation-gatekeeping)
+→ [Full Phase 6 specification](/phases/phase-6-validation-gatekeeping) · [Validation & Gatekeeping architecture](/architecture/validation-gatekeeping)
 
 ## Phase 7 — Turn Modes
 

@@ -42,13 +42,17 @@ class FakeStructuredOutputError extends Error {}
 
 vi.mock('@/lib/ai/gateway', () => ({
   StructuredOutputError: FakeStructuredOutputError,
-  // Moderation always passes in this fixture; moderate.test.ts exercises the
-  // pass/flag/block/degraded matrix directly.
-  callStructured: async () => ({
-    data: { verdict: 'pass', reason: 'ok' },
-    resolvedModel: 'm',
-    usedFallbackModel: false,
-  }),
+  // Moderation always passes and validation always reports no violations in
+  // this fixture — moderate.test.ts and validator.test.ts exercise their
+  // respective matrices directly. Keyed by role since both go through the
+  // same callStructured mock.
+  callStructured: async (_deps: unknown, args: { role: string }) => {
+    if (args.role === 'validator') {
+      return { data: { violations: [] }, resolvedModel: 'm', usedFallbackModel: false };
+    }
+
+    return { data: { verdict: 'pass', reason: 'ok' }, resolvedModel: 'm', usedFallbackModel: false };
+  },
   streamNarration: async (
     _deps: unknown,
     args: { onChunk: (text: string) => void },

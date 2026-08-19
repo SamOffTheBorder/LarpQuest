@@ -118,6 +118,54 @@ export type Database = {
           },
         ]
       }
+      canon_exceptions: {
+        Row: {
+          capability_id: string | null
+          created_at: string
+          created_by: string | null
+          entity_id: string | null
+          exception_note: string
+          id: string
+          rule_id: string
+          story_id: string
+        }
+        Insert: {
+          capability_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          exception_note: string
+          id?: string
+          rule_id: string
+          story_id: string
+        }
+        Update: {
+          capability_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          exception_note?: string
+          id?: string
+          rule_id?: string
+          story_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canon_exceptions_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "canon_exceptions_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chapters: {
         Row: {
           created_at: string
@@ -387,6 +435,63 @@ export type Database = {
           },
           {
             foreignKeyName: "memory_queue_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      proposals: {
+        Row: {
+          created_at: string
+          entity_id: string | null
+          gm_override: boolean
+          id: string
+          imposed_limits: Json | null
+          narrative_cost: string | null
+          proposal: string
+          reasoning: string | null
+          story_id: string
+          suggested_alternative: string | null
+          verdict: string | null
+        }
+        Insert: {
+          created_at?: string
+          entity_id?: string | null
+          gm_override?: boolean
+          id?: string
+          imposed_limits?: Json | null
+          narrative_cost?: string | null
+          proposal: string
+          reasoning?: string | null
+          story_id: string
+          suggested_alternative?: string | null
+          verdict?: string | null
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string | null
+          gm_override?: boolean
+          id?: string
+          imposed_limits?: Json | null
+          narrative_cost?: string | null
+          proposal?: string
+          reasoning?: string | null
+          story_id?: string
+          suggested_alternative?: string | null
+          verdict?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proposals_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposals_story_id_fkey"
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
@@ -808,6 +913,7 @@ export type Database = {
           progression_model: string
           published_at: string
           universe_id: string
+          validation_rules: Json
           version: number
         }
         Insert: {
@@ -821,6 +927,7 @@ export type Database = {
           progression_model: string
           published_at?: string
           universe_id: string
+          validation_rules?: Json
           version: number
         }
         Update: {
@@ -834,6 +941,7 @@ export type Database = {
           progression_model?: string
           published_at?: string
           universe_id?: string
+          validation_rules?: Json
           version?: number
         }
         Relationships: [
@@ -1091,6 +1199,7 @@ export type Database = {
           p_owner_id: string
           p_progression_config?: Json
           p_progression_model: string
+          p_validation_rules?: Json
         }
         Returns: {
           canon_bible_rules_only: Json | null
@@ -1103,6 +1212,7 @@ export type Database = {
           progression_model: string
           published_at: string
           universe_id: string
+          validation_rules: Json
           version: number
         }
         SetofOptions: {
@@ -1170,7 +1280,12 @@ export type Database = {
         }
       }
       publish_chapter: {
-        Args: { p_entity_ids?: string[]; p_prose: string; p_turn_id: string }
+        Args: {
+          p_entity_ids?: string[]
+          p_prose: string
+          p_turn_id: string
+          p_validation_report?: Json
+        }
         Returns: {
           created_at: string
           embedding: string | null
@@ -1207,6 +1322,7 @@ export type Database = {
           p_progression_config?: Json
           p_progression_model: string
           p_universe_id: string
+          p_validation_rules?: Json
         }
         Returns: {
           canon_bible_rules_only: Json | null
@@ -1219,6 +1335,7 @@ export type Database = {
           progression_model: string
           published_at: string
           universe_id: string
+          validation_rules: Json
           version: number
         }
         SetofOptions: {

@@ -39,9 +39,16 @@ function isSectionReady(document: DraftDocument, key: DraftSectionKey): boolean 
 /**
  * A universe version needs an entity schema and a progression model — both
  * come from the Schema Derivation section, so it is the one section that is
- * strictly required. Every other section (rules, entities, timeline, rule
- * pack) informs the Canon Bible a story reads later, not the version object
- * itself, so publishing does not block on them here.
+ * strictly required. Every other section (rules, entities, timeline) informs
+ * the Canon Bible a story reads later, not the version object itself, so
+ * publishing does not block on them here.
+ *
+ * The rule pack section is the one exception: it does feed the version
+ * object directly, as `validationRules` (rule-engine capability) — an
+ * accepted-or-edited rule pack is not just canon-bible narration, it is what
+ * the validator evaluates against every chapter. An unaccepted or absent rule
+ * pack yields an empty array, same as a universe with no research at all:
+ * only the engine-provided Standard Rule Pack applies.
  */
 export function draftToUniverseVersionInput(draftId: string, name: string, document: DraftDocument) {
   if (!isSectionReady(document, 'schemaDerivation')) {
@@ -55,11 +62,18 @@ export function draftToUniverseVersionInput(draftId: string, name: string, docum
 
   const schemaDerivation = section.status === 'edited' ? (section.editedContent ?? section.content) : section.content;
 
+  const rulePackSection = document.rulePack;
+  const validationRules =
+    rulePackSection !== undefined && isSectionReady(document, 'rulePack')
+      ? (rulePackSection.status === 'edited' ? (rulePackSection.editedContent ?? rulePackSection.content) : rulePackSection.content).rules
+      : [];
+
   return {
     name,
     entitySchema: schemaDerivation.entity_schema,
     progressionModel: schemaDerivation.progression_model,
     progressionConfig: schemaDerivation.progression_config,
+    validationRules,
   };
 }
 

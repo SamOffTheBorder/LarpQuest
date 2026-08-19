@@ -54,7 +54,7 @@ begin
   join pg_class c on c.oid = p.polrelid
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public'
-    and c.relname in ('entity_history', 'submissions', 'universe_versions', 'story_reports')
+    and c.relname in ('entity_history', 'submissions', 'universe_versions', 'story_reports', 'proposals', 'canon_exceptions')
     and p.polcmd = 'd';
 
   if violation is not null then

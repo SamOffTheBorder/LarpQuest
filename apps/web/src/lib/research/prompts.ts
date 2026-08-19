@@ -162,6 +162,12 @@ export const RULE_PACK_SYSTEM_PROMPT = [
   'grimdark, a horror losing its edge) — tone rules matter as much as',
   'mechanical rules.',
   '',
+  'A rule may optionally include applies_when: { progression_model_in: [...] }',
+  'to scope it to specific progression models (for example, a capability-',
+  'gating rule that only makes sense when this universe uses "ability_unlock").',
+  'Omit applies_when entirely for a rule that should always be evaluated',
+  'regardless of progression model, such as most tone or continuity rules.',
+  '',
   'Respond with JSON only, matching the required schema exactly.',
 ].join('\n');
 

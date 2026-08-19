@@ -81,6 +81,17 @@ const validSchemaDerivation = {
   progression_config: {},
 };
 
+const firstStandardRule = {
+  id: 'no_ftl_comms',
+  source: 'research' as const,
+  check: 'Flag instantaneous coordination across distance.',
+  severity: 'block' as const,
+};
+
+const validRulePack = {
+  rules: [firstStandardRule],
+};
+
 function seedDraft(id: string, ownerId: string, draft: Record<string, unknown>) {
   state.drafts.set(id, {
     id,
@@ -112,7 +123,40 @@ describe('draftToUniverseVersionInput', () => {
       entitySchema: validSchemaDerivation.entity_schema,
       progressionModel: 'none',
       progressionConfig: {},
+      validationRules: [],
     });
+  });
+
+  it('threads an accepted rule pack section through as validationRules', () => {
+    const input = draftToUniverseVersionInput('draft-1', 'Jujutsu Kaisen', {
+      auMarks: [],
+      schemaDerivation: { status: 'accepted', content: validSchemaDerivation },
+      rulePack: { status: 'accepted', content: validRulePack },
+    });
+
+    expect(input.validationRules).toEqual(validRulePack.rules);
+  });
+
+  it('ignores a rejected or pending rule pack section', () => {
+    const rejected = draftToUniverseVersionInput('draft-1', 'Jujutsu Kaisen', {
+      auMarks: [],
+      schemaDerivation: { status: 'accepted', content: validSchemaDerivation },
+      rulePack: { status: 'rejected', content: validRulePack },
+    });
+
+    expect(rejected.validationRules).toEqual([]);
+  });
+
+  it('prefers editedContent on the rule pack when edited', () => {
+    const edited = { rules: [{ ...firstStandardRule, severity: 'warn' as const }] };
+
+    const input = draftToUniverseVersionInput('draft-1', 'Jujutsu Kaisen', {
+      auMarks: [],
+      schemaDerivation: { status: 'accepted', content: validSchemaDerivation },
+      rulePack: { status: 'edited', content: validRulePack, editedContent: edited },
+    });
+
+    expect(input.validationRules).toEqual(edited.rules);
   });
 
   it('prefers editedContent when the section was edited', () => {

@@ -83,3 +83,25 @@ describe('content rating and conflict policy prompt wiring', () => {
     ).not.toThrow();
   });
 });
+
+describe('gatekeeper ruling prompt wiring', () => {
+  const mode = resolveTurnMode(DEFAULT_TURN_MODE);
+
+  it('omits the ruling section when there are no rulings this turn', () => {
+    const withoutRulings = mode.systemPrompt(DEFAULT_STORY_CONTEXT);
+    const withEmptyArray = mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, gatekeeperRulings: [] });
+
+    expect(withoutRulings).toBe(withEmptyArray);
+    expect(withoutRulings).not.toMatch(/Gatekeeper/i);
+  });
+
+  it('includes every ruling line when proposals were evaluated this turn', () => {
+    const prompt = mode.systemPrompt({
+      ...DEFAULT_STORY_CONTEXT,
+      gatekeeperRulings: ['- Yuji proposed: "Domain Expansion" — verdict: reject. No established basis.'],
+    });
+
+    expect(prompt).toMatch(/Gatekeeper/i);
+    expect(prompt).toContain('Yuji proposed: "Domain Expansion"');
+  });
+});

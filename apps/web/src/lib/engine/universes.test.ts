@@ -125,6 +125,7 @@ vi.mock('@/lib/supabase/server', () => {
             context_policy: args.p_context_policy,
             canon_bible_summary: args.p_canon_bible_summary,
             canon_bible_rules_only: args.p_canon_bible_rules_only,
+            validation_rules: args.p_validation_rules ?? [],
             published_at: '2026-08-17T00:00:00Z',
           };
           state.versions.set(versionId, row);
@@ -155,6 +156,7 @@ vi.mock('@/lib/supabase/server', () => {
             context_policy: args.p_context_policy,
             canon_bible_summary: args.p_canon_bible_summary,
             canon_bible_rules_only: args.p_canon_bible_rules_only,
+            validation_rules: args.p_validation_rules ?? [],
             published_at: '2026-08-17T01:00:00Z',
           };
           state.versions.set(versionId, row);
