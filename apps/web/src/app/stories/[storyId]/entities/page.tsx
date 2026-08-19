@@ -40,9 +40,9 @@ export default async function EntitiesPage({
       : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Entities</h1>
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-semibold sm:text-2xl">Entities</h1>
         <Link href={`/stories/${storyId}`} className={buttonVariants({ variant: 'outline' })}>
           Back to story
         </Link>
@@ -68,7 +68,7 @@ export default async function EntitiesPage({
           entities.map((entity) => (
             <Link key={entity.id} href={`/stories/${storyId}/entities/${entity.id}`}>
               <Card className="transition-colors hover:bg-muted/50">
-                <CardHeader className="flex-row items-center justify-between">
+                <CardHeader className="flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <CardTitle>{entity.name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{entity.type}</p>

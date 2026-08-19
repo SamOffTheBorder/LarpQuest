@@ -18,7 +18,7 @@ Each phase depends on the last. The ordering is not a preference — it is a dep
 | [5](/phases/phase-5-multiplayer) | Multiplayer | ~3 weeks |
 | [6](/phases/phase-6-validation-gatekeeping) | Validation & Gatekeeping | ~2 weeks |
 | [7](/phases/phase-7-turn-modes) | Turn Modes | ~2 weeks |
-| 8 | Polish | — |
+| [8](/phases/phase-8-polish) | Polish | — |
 
 ## Phase 1 — Generic Core
 
@@ -118,7 +118,11 @@ If any launch template required a special case before this point, **fix the abst
 
 ## Phase 8 — Polish
 
-Image prompt generation as a first-class per-chapter feature. Full-text search across a story. Export to Markdown/PDF/EPUB. Public read-only share links. Mobile-responsive pass. Universe marketplace — browse, clone, fork published universes. UI design pass — real visual design (not just Tailwind/shadcn defaults) across the turn loop, entity sheets, universe review UI, and story dashboard, once every phase's surface area exists to design against.
+**Status: implemented, pending browser/design verification.** Image prompt generation as a first-class per-chapter feature. Full-text search across a story. Export to Markdown/PDF/EPUB. Public read-only share links. Mobile-responsive pass (mechanical breakpoints applied; not yet browser-verified). Universe marketplace — browse, clone, fork published universes. The real visual-design pass (beyond Tailwind/shadcn defaults) has not been done — it needs visual judgment a headless environment can't provide.
+
+Extended beyond this literal scope at the project owner's request: actual manga-style panel image generation and anime-style video generation per chapter, on top of text image-prompt generation. See the phase doc for how the cost and infrastructure implications of that extension are scoped.
+
+→ [Full Phase 8 specification](/phases/phase-8-polish)
 
 ## Non-obvious requirements
 

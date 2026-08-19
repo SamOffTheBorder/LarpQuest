@@ -48,6 +48,13 @@ const serverSchema = z.object({
    */
   INNGEST_EVENT_KEY: z.string().min(1).optional(),
   INNGEST_SIGNING_KEY: z.string().min(1).optional(),
+  /**
+   * Direct video-generation provider key (Phase 8). Optional: video
+   * generation is opt-in per story and off by default, so most deployments
+   * never call it. `media-gateway.ts`'s `generateVideo` is the only consumer.
+   */
+  VIDEO_PROVIDER_API_KEY: z.string().min(1).optional(),
+  VIDEO_PROVIDER_BASE_URL: z.string().url().optional(),
 });
 
 function parse<T extends z.ZodTypeAny>(schema: T, source: unknown, label: string): z.infer<T> {

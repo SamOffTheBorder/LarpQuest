@@ -20,6 +20,8 @@ const sidebars: SidebarsConfig = {
         'architecture/validation-gatekeeping',
         'architecture/multiplayer',
         'architecture/turn-modes',
+        'architecture/media-generation',
+        'architecture/search-export-sharing',
       ],
     },
     {
@@ -35,6 +37,7 @@ const sidebars: SidebarsConfig = {
         'phases/phase-5-multiplayer',
         'phases/phase-6-validation-gatekeeping',
         'phases/phase-7-turn-modes',
+        'phases/phase-8-polish',
         'phases/getting-started',
       ],
     },

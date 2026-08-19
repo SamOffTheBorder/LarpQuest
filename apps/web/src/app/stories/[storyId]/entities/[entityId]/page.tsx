@@ -41,10 +41,10 @@ export default async function EntityPage({
   const fields = Object.entries(entity.data);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">{entity.name}</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">{entity.name}</h1>
           <p className="text-sm text-muted-foreground">{entity.type}</p>
         </div>
         <Link href={`/stories/${storyId}/entities`} className={buttonVariants({ variant: 'outline' })}>
@@ -62,9 +62,9 @@ export default async function EntityPage({
           ) : (
             <dl className="flex flex-col gap-2">
               {fields.map(([field, value]) => (
-                <div key={field} className="flex items-baseline justify-between gap-4 border-b pb-2">
+                <div key={field} className="flex flex-col gap-1 border-b pb-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
                   <dt className="font-mono text-sm text-muted-foreground">{field}</dt>
-                  <dd className="text-sm">{JSON.stringify(value)}</dd>
+                  <dd className="text-sm break-words">{JSON.stringify(value)}</dd>
                 </div>
               ))}
             </dl>

@@ -320,6 +320,67 @@ create table canon_exceptions (
 
 `entity_id`/`capability_id` on `canon_exceptions` are a superset of the build plan's minimal `rule_id` + `exception_note` sketch — both null is still a valid row and means "suppress this rule for the whole story," which is also how a universe disables one Standard Rule Pack rule entirely. `canon_exceptions` is what makes a [GM override permanent](/architecture/validation-gatekeeping#gm-override-writes-to-canon); `proposals` rows are written by the Gatekeeper (service-role only — no client insert policy) and only ever gain `gm_override = true` afterward, never a changed `verdict`/`reasoning`.
 
+## Chapter media (Phase 8)
+
+```sql
+create table chapter_images (
+  id uuid primary key default gen_random_uuid(),
+  chapter_id uuid references chapters(id) on delete cascade,
+  prompt text,
+  storage_path text,
+  status text not null default 'queued',   -- queued|complete|failed
+  error text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table chapter_videos (
+  id uuid primary key default gen_random_uuid(),
+  chapter_id uuid references chapters(id) on delete cascade,
+  storage_path text,
+  status text not null default 'queued',   -- queued|running|complete|failed
+  error text,
+  job_id text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+```
+
+One `chapter_images` row per generated manga panel — a chapter may have zero, one, or several, since panels are independent images rather than a composited page (Phase 8 non-goal). At most one active `chapter_videos` row per chapter, seeded from that chapter's completed image(s). Both RLS-gated through the owning chapter's `story_members`, same join pattern used everywhere a table hangs off `chapters` rather than `stories` directly. Storage buckets `chapter-images`/`chapter-videos` mirror the same story-membership gate at the path level (`story_id/chapter_id/...`), since Storage policies are the first use of Supabase Storage in this project.
+
+Illustration and video are both **opt-in per story**, video **off by default** given cost — `stories.turn_config.media.{illustration,video}`, following the same jsonb-key pattern `turn_config.active_mode` used in Phase 7 rather than adding dedicated boolean columns.
+
+## Search, export, and sharing (Phase 8)
+
+```sql
+-- generated tsvector columns + GIN indexes added to chapters and entities
+create index on chapters using gin (search_vector);   -- prose + summary
+create index on entities using gin (search_vector);   -- name + data
+
+create table export_jobs (
+  id uuid primary key default gen_random_uuid(),
+  story_id uuid references stories(id) on delete cascade,
+  requested_by uuid references auth.users,
+  format text not null check (format in ('markdown', 'pdf', 'epub')),
+  status text not null default 'queued',   -- queued|complete|failed
+  storage_path text,
+  error text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table share_links (
+  id uuid primary key default gen_random_uuid(),
+  story_id uuid references stories(id) on delete cascade,
+  token text not null unique,
+  created_by uuid references auth.users,
+  revoked_at timestamptz,
+  created_at timestamptz default now()
+);
+```
+
+Full-text search reuses Postgres directly rather than adding a search service, matching this project's existing preference for pgvector over an external vector DB (Phase 4). `export_jobs` runs export generation as a background step (Storage bucket `story-exports`) instead of holding a request open for PDF/EPUB conversion. `share_links` is deliberately the one table on this page with **no anonymous-read RLS policy** — a public visitor isn't a `story_members` row, so token validation and access happen at the route layer (service-role lookup), the same pre-membership pattern `story_invites`' accept flow already established in Phase 5.
+
 ## Keys and usage
 
 ```sql
@@ -369,10 +430,6 @@ Phase 6 added: `proposals`, `canon_exceptions`, `universe_versions.validation_ru
 
 Phase 7 added: `turn_mode_changes`. No column added to `stories` — `turn_config.active_mode` is a new key within the existing jsonb column, unbackfilled (absent means "never switched," read as `freeform`). `turn-modes.ts`'s dispatch table gained five entries (`action`, `scene`, `investigation`, `dialogue`, `montage`); no schema change was needed for the modes themselves, only for the switching audit trail.
 
-Still deferred, so later migrations are explicit about introducing them:
-
-| Object | Arrives in |
-|---|---|
-| `universes.is_public`, `forked_from` (marketplace), `image_prompts` (populated) | Phase 8 |
+Phase 8 (specified, not yet implemented) adds: `chapter_images`, `chapter_videos`, `export_jobs`, `share_links`, generated `search_vector` columns + GIN indexes on `chapters`/`entities`, and Storage buckets `chapter-images`/`chapter-videos`/`story-exports`. It populates two columns that have existed since earlier phases but were never written to: `chapters.image_prompts` (present since Phase 1) and `universes.is_public`/`forked_from` (present since Phase 2). `stories.turn_config` gains a `media.{illustration,video}` key, same unbackfilled-jsonb-key pattern as Phase 7's `active_mode`. No existing column changes shape. See `openspec/changes/phase-8-polish/` and the [Phase 8 doc](/phases/phase-8-polish).
 
 Phase 1 adds one table not in the original plan — `extraction_queue`, with a claim timestamp and attempt count — because extraction runs after publication and needs stale-claim recovery. Phase 3 introduces Inngest for the research pipeline's genuinely multi-step orchestration, but does **not** migrate `extraction_queue` onto it — that queue's one-shot retryable job has no orchestration need Inngest would improve on, so it keeps its existing claim/update shape. Phase 4 follows the same precedent for `memory_queue`: a new independent job kind gets its own table, not a type column on `extraction_queue`.

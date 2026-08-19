@@ -166,6 +166,108 @@ export type Database = {
           },
         ]
       }
+      chapter_images: {
+        Row: {
+          chapter_id: string
+          created_at: string
+          error: string | null
+          id: string
+          prompt: string | null
+          status: string
+          storage_path: string | null
+          story_id: string
+          updated_at: string
+        }
+        Insert: {
+          chapter_id: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          prompt?: string | null
+          status?: string
+          storage_path?: string | null
+          story_id: string
+          updated_at?: string
+        }
+        Update: {
+          chapter_id?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          prompt?: string | null
+          status?: string
+          storage_path?: string | null
+          story_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chapter_images_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chapter_images_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chapter_videos: {
+        Row: {
+          chapter_id: string
+          created_at: string
+          error: string | null
+          id: string
+          job_id: string | null
+          status: string
+          storage_path: string | null
+          story_id: string
+          updated_at: string
+        }
+        Insert: {
+          chapter_id: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          job_id?: string | null
+          status?: string
+          storage_path?: string | null
+          story_id: string
+          updated_at?: string
+        }
+        Update: {
+          chapter_id?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          job_id?: string | null
+          status?: string
+          storage_path?: string | null
+          story_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chapter_videos_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chapter_videos_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chapters: {
         Row: {
           created_at: string
@@ -179,6 +281,7 @@ export type Database = {
           prose: string
           published_at: string
           rolled_back_at: string | null
+          search_vector: unknown
           story_id: string
           summary: string | null
           turn_id: string | null
@@ -198,6 +301,7 @@ export type Database = {
           prose: string
           published_at?: string
           rolled_back_at?: string | null
+          search_vector?: unknown
           story_id: string
           summary?: string | null
           turn_id?: string | null
@@ -217,6 +321,7 @@ export type Database = {
           prose?: string
           published_at?: string
           rolled_back_at?: string | null
+          search_vector?: unknown
           story_id?: string
           summary?: string | null
           turn_id?: string | null
@@ -248,6 +353,7 @@ export type Database = {
           data: Json
           id: string
           name: string
+          search_vector: unknown
           status: string
           story_id: string
           type: string
@@ -259,6 +365,7 @@ export type Database = {
           data?: Json
           id?: string
           name: string
+          search_vector?: unknown
           status?: string
           story_id: string
           type: string
@@ -270,6 +377,7 @@ export type Database = {
           data?: Json
           id?: string
           name?: string
+          search_vector?: unknown
           status?: string
           story_id?: string
           type?: string
@@ -340,6 +448,50 @@ export type Database = {
           },
         ]
       }
+      export_jobs: {
+        Row: {
+          created_at: string
+          error: string | null
+          format: string
+          id: string
+          requested_by: string | null
+          status: string
+          storage_path: string | null
+          story_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          format: string
+          id?: string
+          requested_by?: string | null
+          status?: string
+          storage_path?: string | null
+          story_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          format?: string
+          id?: string
+          requested_by?: string | null
+          status?: string
+          storage_path?: string | null
+          story_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_jobs_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       extraction_queue: {
         Row: {
           attempt_count: number
@@ -384,6 +536,57 @@ export type Database = {
           },
           {
             foreignKeyName: "extraction_queue_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      image_prompt_queue: {
+        Row: {
+          attempt_count: number
+          chapter_id: string
+          claimed_at: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          status: string
+          story_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          chapter_id: string
+          claimed_at?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          story_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          chapter_id?: string
+          claimed_at?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          story_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "image_prompt_queue_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: true
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "image_prompt_queue_story_id_fkey"
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
@@ -542,6 +745,41 @@ export type Database = {
             columns: ["draft_id"]
             isOneToOne: false
             referencedRelation: "universe_drafts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      share_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          revoked_at: string | null
+          story_id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          revoked_at?: string | null
+          story_id: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          revoked_at?: string | null
+          story_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "share_links_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
             referencedColumns: ["id"]
           },
         ]
@@ -992,23 +1230,37 @@ export type Database = {
       universes: {
         Row: {
           created_at: string
+          forked_from: string | null
           id: string
+          is_public: boolean
           name: string
           owner_id: string
         }
         Insert: {
           created_at?: string
+          forked_from?: string | null
           id?: string
+          is_public?: boolean
           name: string
           owner_id: string
         }
         Update: {
           created_at?: string
+          forked_from?: string | null
           id?: string
+          is_public?: boolean
           name?: string
           owner_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "universes_forked_from_fkey"
+            columns: ["forked_from"]
+            isOneToOne: false
+            referencedRelation: "universes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       usage_log: {
         Row: {
@@ -1080,6 +1332,7 @@ export type Database = {
           data: Json
           id: string
           name: string
+          search_vector: unknown
           status: string
           story_id: string
           type: string
@@ -1112,6 +1365,26 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      claim_image_prompt_job: {
+        Args: { stale_after?: string }
+        Returns: {
+          attempt_count: number
+          chapter_id: string
+          claimed_at: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          status: string
+          story_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "image_prompt_queue"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       claim_memory_job: {
         Args: { stale_after?: string }
         Returns: {
@@ -1132,6 +1405,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      clone_universe: {
+        Args: { p_owner_id: string; p_universe_id: string }
+        Returns: {
+          canon_bible_rules_only: Json | null
+          canon_bible_summary: Json | null
+          context_policy: Json
+          created_at: string
+          entity_schema: Json
+          id: string
+          progression_config: Json
+          progression_model: string
+          published_at: string
+          universe_id: string
+          validation_rules: Json
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "universe_versions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_entity_with_history: {
         Args: {
           p_controlled_by?: string
@@ -1147,6 +1443,7 @@ export type Database = {
           data: Json
           id: string
           name: string
+          search_vector: unknown
           status: string
           story_id: string
           type: string
@@ -1333,6 +1630,7 @@ export type Database = {
           prose: string
           published_at: string
           rolled_back_at: string | null
+          search_vector: unknown
           story_id: string
           summary: string | null
           turn_id: string | null
@@ -1380,6 +1678,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      resolve_share_link: { Args: { p_token: string }; Returns: string }
       rollback_chapter: {
         Args: { p_chapter_id: string; p_user_id: string }
         Returns: {
@@ -1388,6 +1687,16 @@ export type Database = {
           field: string
           outcome: string
         }[]
+      }
+      search_story: {
+        Args: { p_query: string; p_story_id: string }
+        Returns: Database["public"]["CompositeTypes"]["story_search_result"][]
+        SetofOptions: {
+          from: "*"
+          to: "story_search_result"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       start_research_job: {
         Args: { p_draft_id: string; p_stage: string }
@@ -1444,7 +1753,13 @@ export type Database = {
       [_ in never]: never
     }
     CompositeTypes: {
-      [_ in never]: never
+      story_search_result: {
+        kind: string | null
+        id: string | null
+        title: string | null
+        snippet: string | null
+        rank: number | null
+      }
     }
   }
 }

@@ -40,10 +40,10 @@ export default async function ReviewDraftPage({
   const jobByStage = new Map(jobs.map((job) => [job.stage, job]));
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-6 p-6">
-      <div className="flex items-center justify-between gap-4">
+    <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">{draft.input.name}</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">{draft.input.name}</h1>
           <div className="mt-1 flex items-center gap-2">
             <Badge variant={draft.status === 'published' ? 'default' : 'secondary'}>{draft.status}</Badge>
           </div>

@@ -9,7 +9,7 @@ title: Model Roles
 Roles have genuinely different requirements. Using the expensive creative model for validation wastes money on a narrow structured task; using the cheap model for narration produces prose users will not tolerate.
 :::
 
-Models are assigned by role, configurable per-universe and per-story, all routed through OpenRouter.
+Models are assigned by role, configurable per-universe and per-story, routed through OpenRouter — with one exception, noted below.
 
 | Role | Requirements | Notes |
 |---|---|---|
@@ -20,6 +20,9 @@ Models are assigned by role, configurable per-universe and per-story, all routed
 | **Summarizer** | Mid-tier, cheap | Runs on every chapter. |
 | **Gatekeeper** | Reasoning-capable | Evaluates proposed new capabilities. Quality matters. |
 | **Embedder** | Embedding model | Retrieval. |
+| **Moderator** | Fast, cheap, classification | Runs once per turn lock, on the critical path to generation. |
+| **Illustrator** | Image generation | Renders manga-panel images from chapter content. Phase 8. |
+| **Videographer** | Video generation | Renders an anime-style clip per chapter. Phase 8, opt-in, off by default. Not routed through OpenRouter — see below. |
 
 ## Cost profile
 
@@ -54,6 +57,10 @@ A missing role falls back to that role's documented default and records the fall
 2. **Every structured output is parsed through a Zod schema** before it reaches the database.
 3. **A schema validation failure retries once** with the error appended to the prompt, then raises a typed error. A model that fails a schema twice usually fails it persistently.
 4. **Every call writes a `usage_log` row** — including calls that fail after the provider has already billed tokens, so cost reporting is not understated by failures.
+
+## The video-generation exception
+
+**Illustrator** stays on the `gateway.ts` path where OpenRouter serves an image-output model. **Videographer** does not — no current-generation video model is available through OpenRouter, so it calls a direct provider API through a separate `media-gateway.ts`. This is the one role that doesn't route through OpenRouter's chat-completions contract, because image and video generation return binary/URL output rather than token-priced text, and video generation is asynchronous rather than a single request/response. The role-resolution and `usage_log` contract above still applies identically — only the transport differs, and it's isolated entirely inside `media-gateway.ts`. See [Phase 8](/phases/phase-8-polish) for why.
 
 ## Phase 1 scope
 

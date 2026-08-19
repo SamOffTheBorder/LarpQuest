@@ -11,12 +11,17 @@ export default async function StoriesPage() {
   const stories = await listStories(user.id);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Your stories</h1>
-        <Link href="/stories/new" className={buttonVariants()}>
-          New story
-        </Link>
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-semibold sm:text-2xl">Your stories</h1>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/universes/marketplace" className={buttonVariants({ variant: 'outline' })}>
+            Universe marketplace
+          </Link>
+          <Link href="/stories/new" className={buttonVariants()}>
+            New story
+          </Link>
+        </div>
       </div>
 
       {stories.length === 0 ? (
@@ -28,7 +33,7 @@ export default async function StoriesPage() {
           {stories.map((story) => (
             <Link key={story.id} href={`/stories/${story.id}`}>
               <Card className="transition-colors hover:bg-muted/50">
-                <CardHeader className="flex-row items-center justify-between">
+                <CardHeader className="flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <CardTitle>{story.title}</CardTitle>
                     <p className="text-sm text-muted-foreground">Turn {story.currentTurn}</p>

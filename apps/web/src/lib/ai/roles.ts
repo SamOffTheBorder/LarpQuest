@@ -20,6 +20,8 @@ export const MODEL_ROLES = [
   'gatekeeper',
   'embedder',
   'moderator',
+  'illustrator',
+  'videographer',
 ] as const;
 
 export type ModelRole = (typeof MODEL_ROLES)[number];
@@ -37,6 +39,15 @@ export const modelRoleSchema = z.enum(MODEL_ROLES);
  * GET /api/v1/models) — all three ids in active use below (opus-4.1,
  * sonnet-4.5, haiku-4.5) resolve. Re-check if generation starts failing with
  * a model-not-found error; OpenRouter deprecates ids over time.
+ *
+ * `illustrator` and `videographer` (added Phase 8) are the two roles that do
+ * not exclusively speak OpenRouter's chat-completions contract — see
+ * `media-gateway.ts`. `illustrator` resolves to an OpenRouter image-output
+ * model; `videographer` resolves to a direct provider id (no `/` OpenRouter
+ * slug prefix), since no OpenRouter-routable video-generation model exists
+ * yet. Both defaults are placeholders pending a live-availability/pricing
+ * check identical to the one already done for the text roles above — do not
+ * treat either as a confirmed-live id until that check has run.
  */
 export const DEFAULT_MODELS: Record<ModelRole, string> = {
   researcher: 'anthropic/claude-opus-4.1',
@@ -49,6 +60,10 @@ export const DEFAULT_MODELS: Record<ModelRole, string> = {
   // Cheap and fast: moderation runs once per turn lock on the critical path
   // to generation, and only needs to classify, not write.
   moderator: 'anthropic/claude-haiku-4.5',
+  // Routed through OpenRouter's image-output support.
+  illustrator: 'google/gemini-2.5-flash-image',
+  // Direct provider call, not OpenRouter — see media-gateway.ts.
+  videographer: 'kling-v2.1',
 };
 
 /**

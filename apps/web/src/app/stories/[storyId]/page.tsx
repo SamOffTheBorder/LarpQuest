@@ -51,18 +51,24 @@ export default async function StoryPage({
     liveTurn !== null ? await listSubmissionsForTurn(liveTurn.id, user.id) : [];
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
-      <div className="flex items-start justify-between">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold">{story.title}</h1>
+            <h1 className="text-xl font-semibold sm:text-2xl">{story.title}</h1>
             {story.status === 'archived' && <Badge variant="secondary">Archived</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">
             Turn {story.currentTurn} &middot; ${costUsd.toFixed(4)} spent
           </p>
         </div>
-        <div className="flex items-start gap-2">
+        <div className="flex flex-wrap items-start gap-2">
+          <Link href={`/stories/${storyId}/search`} className={buttonVariants({ variant: 'outline' })}>
+            Search
+          </Link>
+          <Link href={`/stories/${storyId}/export`} className={buttonVariants({ variant: 'outline' })}>
+            Export
+          </Link>
           <Link href={`/stories/${storyId}/entities`} className={buttonVariants({ variant: 'outline' })}>
             Entities
           </Link>
@@ -103,8 +109,8 @@ export default async function StoryPage({
         ) : (
           [...chapters].reverse().map((chapter) => (
             <Card key={chapter.id}>
-              <CardHeader className="flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
+              <CardHeader className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
                   <CardTitle>Chapter {chapter.turnNumber}</CardTitle>
                   {chapter.rolledBackAt !== null && <Badge variant="secondary">Rolled back</Badge>}
                   {chapter.extractionStatus === 'pending' ? (

@@ -1,6 +1,7 @@
 import { serve } from 'inngest/next';
 
 import { inngest } from '@/inngest/client';
+import { generateChapterVideo } from '@/inngest/functions/generate-chapter-video';
 import { rerunResearchStage } from '@/inngest/functions/rerun-research-stage';
 import { runResearchPipeline } from '@/inngest/functions/run-research-pipeline';
 
@@ -11,5 +12,5 @@ import { runResearchPipeline } from '@/inngest/functions/run-research-pipeline';
  */
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [runResearchPipeline, rerunResearchStage],
+  functions: [runResearchPipeline, rerunResearchStage, generateChapterVideo],
 });
