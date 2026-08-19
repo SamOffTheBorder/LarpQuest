@@ -27,8 +27,10 @@ describe('turn mode dispatch', () => {
     expect(() => resolveTurnMode('tactical')).toThrow(/freeform/);
   });
 
-  it('registers exactly one mode in Phase 1', () => {
-    expect(registeredTurnModes()).toEqual(['freeform']);
+  it('registers all six modes after Phase 7', () => {
+    expect([...registeredTurnModes()].sort()).toEqual(
+      ['action', 'dialogue', 'freeform', 'investigation', 'montage', 'scene'].sort(),
+    );
   });
 
   it('defaults to a registered mode', () => {
@@ -103,5 +105,57 @@ describe('gatekeeper ruling prompt wiring', () => {
 
     expect(prompt).toMatch(/Gatekeeper/i);
     expect(prompt).toContain('Yuji proposed: "Domain Expansion"');
+  });
+});
+
+describe('Phase 7 turn modes', () => {
+  const newModeNames = ['action', 'scene', 'investigation', 'dialogue', 'montage'] as const;
+
+  it.each(newModeNames)('%s mode has a non-empty prompt and extraction targets', (name) => {
+    const mode = resolveTurnMode(name);
+
+    expect(mode.name).toBe(name);
+    expect(mode.systemPrompt(DEFAULT_STORY_CONTEXT).length).toBeGreaterThan(0);
+    expect(mode.extractionTargets.length).toBeGreaterThan(0);
+    expect(mode.extractionTargets.every((target) => typeof target === 'string')).toBe(true);
+  });
+
+  it.each(newModeNames)('%s mode still injects content-rating and conflict-policy instructions', (name) => {
+    const mode = resolveTurnMode(name);
+    const everyone = mode.systemPrompt({ contentRating: 'everyone', conflictPolicy: 'gm_ruling' });
+
+    expect(everyone).toContain('all audiences');
+    expect(everyone).toMatch(/do not resolve the conflict yourself/i);
+  });
+
+  it.each(newModeNames)('%s mode still appends the Gatekeeper rulings section when present', (name) => {
+    const mode = resolveTurnMode(name);
+    const withoutRulings = mode.systemPrompt(DEFAULT_STORY_CONTEXT);
+    const withRulings = mode.systemPrompt({
+      ...DEFAULT_STORY_CONTEXT,
+      gatekeeperRulings: ['- A player proposed something — verdict: allow_with_limits.'],
+    });
+
+    expect(withoutRulings).not.toMatch(/Gatekeeper/i);
+    expect(withRulings).toMatch(/Gatekeeper/i);
+    expect(withRulings).toContain('verdict: allow_with_limits');
+  });
+
+  it('each of the six modes produces distinct prompt text for the same story context', () => {
+    const allModes = registeredTurnModes();
+    const prompts = allModes.map((name) => resolveTurnMode(name).systemPrompt(DEFAULT_STORY_CONTEXT));
+
+    expect(new Set(prompts).size).toBe(allModes.length);
+  });
+
+  it('investigation mode instructs gating by tracked knowledge state, independent of any specific universe schema', () => {
+    const mode = resolveTurnMode('investigation');
+    const prompt = mode.systemPrompt(DEFAULT_STORY_CONTEXT);
+
+    // Prompt-text assertion only — the engine does not validate that any
+    // particular universe schema defines a knowledge-state field. A universe
+    // without one simply makes the instruction inert, per design.md Decision 5.
+    expect(prompt).toMatch(/knowledge state/i);
+    expect(prompt).not.toMatch(/clue|mystery|detective|magic|power/i);
   });
 });

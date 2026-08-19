@@ -15,6 +15,9 @@ const state = vi.hoisted(() => ({
   /** Every write to `chapters`, so a test can assert publication fields are untouched. */
   chapterWrites: [] as Record<string, unknown>[],
   extractorBehavior: 'succeed' as 'succeed' | 'throw' | 'malformed',
+  /** Captures each callStructured invocation's userPrompt, so a test can
+   * assert extractionTargets actually varies the extractor prompt by mode. */
+  capturedPrompts: [] as string[],
 }));
 
 vi.mock('server-only', () => ({}));
@@ -33,7 +36,9 @@ vi.mock('@/lib/ai/gateway', async () => {
 
   return {
     ...actual,
-    callStructured: async () => {
+    callStructured: async (_deps: unknown, args: { userPrompt: string }) => {
+      state.capturedPrompts.push(args.userPrompt);
+
       if (state.extractorBehavior === 'throw') {
         throw new Error('extractor call failed');
       }
@@ -161,6 +166,7 @@ beforeEach(() => {
   state.entities.clear();
   state.chapterWrites.length = 0;
   state.extractorBehavior = 'succeed';
+  state.capturedPrompts.length = 0;
 
   state.chapters.set(CHAPTER, {
     id: CHAPTER,
@@ -259,5 +265,26 @@ describe('extraction worker', () => {
     const outcome = await runOneExtraction();
 
     expect(outcome.claimed).toBe(false);
+  });
+});
+
+describe('extraction targets vary by the chapter\'s own stored turn mode (Phase 7)', () => {
+  it('an action-mode chapter and a dialogue-mode chapter produce different extractor prompts', async () => {
+    const { runOneExtraction } = await import('@/lib/engine/extraction-worker');
+
+    state.chapters.set(CHAPTER, { ...state.chapters.get(CHAPTER), turn_mode: 'action' });
+    await runOneExtraction();
+    const actionPrompt = state.capturedPrompts.at(-1);
+
+    state.queue.set(JOB, { id: JOB, chapter_id: CHAPTER, story_id: STORY, status: 'queued' });
+    state.chapters.set(CHAPTER, { ...state.chapters.get(CHAPTER), turn_mode: 'dialogue', extraction_status: 'pending' });
+    await runOneExtraction();
+    const dialoguePrompt = state.capturedPrompts.at(-1);
+
+    expect(actionPrompt).toContain('capabilities');
+    expect(actionPrompt).toContain('injuries');
+    expect(dialoguePrompt).toContain('revealed_information');
+    expect(dialoguePrompt).toContain('standing_shifts');
+    expect(actionPrompt).not.toBe(dialoguePrompt);
   });
 });

@@ -17,7 +17,7 @@ Each phase depends on the last. The ordering is not a preference — it is a dep
 | [4](/phases/phase-4-memory) | Memory | ~2 weeks |
 | [5](/phases/phase-5-multiplayer) | Multiplayer | ~3 weeks |
 | [6](/phases/phase-6-validation-gatekeeping) | Validation & Gatekeeping | ~2 weeks |
-| 7 | Turn Modes | ~2 weeks |
+| [7](/phases/phase-7-turn-modes) | Turn Modes | ~2 weeks |
 | 8 | Polish | — |
 
 ## Phase 1 — Generic Core
@@ -110,9 +110,11 @@ Multiplayer means people who do not know each other:
 
 ## Phase 7 — Turn Modes
 
-Implement the remaining five modes. Mid-story mode switching.
+**Status: implemented.** The remaining five turn modes (`action`, `scene`, `investigation`, `dialogue`, `montage`) registered in the same dispatch table `freeform` used since Phase 1. Mid-story mode switching, owner/GM only, auditable, effective from the next turn opened.
 
-If any launch template required a special case before this point, **fix the abstraction here** rather than working around it.
+If any launch template required a special case before this point, **fix the abstraction here** rather than working around it. None did — all six modes are prompt templates and extraction-target lists, nothing more.
+
+→ [Full Phase 7 specification](/phases/phase-7-turn-modes) · [Turn Modes architecture](/architecture/turn-modes)
 
 ## Phase 8 — Polish
 

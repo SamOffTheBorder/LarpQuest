@@ -119,7 +119,7 @@ create table stories (
   title text not null,
   content_rating text not null,
   model_config jsonb not null,        -- model string per role
-  turn_config jsonb not null,         -- deadline, absent policy, conflict policy
+  turn_config jsonb not null,         -- deadline, absent policy, conflict policy, active_mode (Phase 7)
   world_ledger jsonb not null default '{}',
   current_turn int default 0,
   status text default 'active',
@@ -272,7 +272,22 @@ create table submissions (
 
 Submissions are a **separate table from generation state** by design. No generation outcome — failure, timeout, retry exhaustion — may delete or alter a submission.
 
-`turns.deadline` was present from Phase 1's original migration but read by nothing until Phase 5's `sweepDeadlines`. `moderation_status`/`moderation_reason` record the once-per-turn moderation pass Phase 5 added — see [Multiplayer](/architecture/multiplayer#moderation).
+`turns.deadline` was present from Phase 1's original migration but read by nothing until Phase 5's `sweepDeadlines`. `moderation_status`/`moderation_reason` record the once-per-turn moderation pass Phase 5 added — see [Multiplayer](/architecture/multiplayer#moderation). `turns.mode` (present since Phase 1) is fixed at creation and never changes afterward — see `turn_mode_changes` below for how the *story's* mode changes between turns.
+
+## Turn mode changes
+
+```sql
+create table turn_mode_changes (
+  id uuid primary key default gen_random_uuid(),
+  story_id uuid references stories(id) on delete cascade,
+  previous_mode text,
+  new_mode text not null,
+  changed_by uuid references auth.users,
+  created_at timestamptz not null default now()
+);
+```
+
+Phase 7's audit trail for `stories.turn_config.active_mode`. Append-only, same shape as `entity_history`, but without an `entity_id` — a mode switch is a story-level event with no entity to attach to. `openTurn` reads `turn_config.active_mode` fresh at the moment a new turn is created, so a switch takes effect starting with the next turn opened; it never touches any `turns` row already written. See [Turn Modes](/architecture/turn-modes#mode-switching).
 
 ## Gatekeeper and canon exceptions
 
@@ -351,6 +366,8 @@ Phase 4 added: the `vector` extension (in a dedicated `extensions` schema, not `
 Phase 5 added: `story_invites`, `story_reports`, `stories.conflict_policy`, `turns.moderation_status`/`moderation_reason`. New RPCs: `join_story_via_invite`; new policy helper `is_story_role` (mirrors `is_story_owner`'s shape, both revoked from direct client execution). `entities_update` and `story_members_delete` RLS policies were narrowed (dropped and recreated) rather than replaced with new tables.
 
 Phase 6 added: `proposals`, `canon_exceptions`, `universe_versions.validation_rules`. `turns.status` check constraint widened to add `'validating'`. `chapters.validation_report` (present since Phase 1, unpopulated) is now written on every publish. `publish_chapter` was dropped and recreated — its guard moved from `generating` to `validating`, and it gained a `p_validation_report` parameter. `create_universe_with_version`/`publish_universe_version` gained a `p_validation_rules` parameter, dropped and recreated for the same "can't change a parameter list" reason as Phase 4's canon-bible params.
+
+Phase 7 added: `turn_mode_changes`. No column added to `stories` — `turn_config.active_mode` is a new key within the existing jsonb column, unbackfilled (absent means "never switched," read as `freeform`). `turn-modes.ts`'s dispatch table gained five entries (`action`, `scene`, `investigation`, `dialogue`, `montage`); no schema change was needed for the modes themselves, only for the switching audit trail.
 
 Still deferred, so later migrations are explicit about introducing them:
 

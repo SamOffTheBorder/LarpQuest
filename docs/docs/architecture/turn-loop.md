@@ -81,7 +81,7 @@ The same loop, with a different prompt template and extraction targets. Modes ar
 
 Modes are switchable mid-story. A story might run `scene` for setup, `investigation` through the middle, and `action` for the climax.
 
-**Phase 1 implements only `freeform`** — but through the dispatch table the other five will later register in, so adding them requires zero changes to the loop itself.
+**Phase 1 implemented only `freeform`.** Phase 7 registered the other five in the same dispatch table — adding them required zero changes to the loop itself, exactly as designed. See [Turn Modes](/architecture/turn-modes) for how switching works and how each mode's prompt/extraction pair is built.
 
 ## What's actually built vs. planned, as of Phase 1
 

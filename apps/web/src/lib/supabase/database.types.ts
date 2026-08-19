@@ -798,6 +798,41 @@ export type Database = {
           },
         ]
       }
+      turn_mode_changes: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          id: string
+          new_mode: string
+          previous_mode: string | null
+          story_id: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_mode: string
+          previous_mode?: string | null
+          story_id: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_mode?: string
+          previous_mode?: string | null
+          story_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "turn_mode_changes_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       turns: {
         Row: {
           attempt_count: number

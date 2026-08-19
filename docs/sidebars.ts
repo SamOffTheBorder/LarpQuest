@@ -19,6 +19,7 @@ const sidebars: SidebarsConfig = {
         'architecture/memory-and-context',
         'architecture/validation-gatekeeping',
         'architecture/multiplayer',
+        'architecture/turn-modes',
       ],
     },
     {
@@ -33,6 +34,7 @@ const sidebars: SidebarsConfig = {
         'phases/phase-4-memory',
         'phases/phase-5-multiplayer',
         'phases/phase-6-validation-gatekeeping',
+        'phases/phase-7-turn-modes',
         'phases/getting-started',
       ],
     },

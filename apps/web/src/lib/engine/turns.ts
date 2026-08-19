@@ -16,7 +16,7 @@ import { evaluateProposal } from '@/lib/engine/gatekeeper';
 import { assertMember, requireRole } from '@/lib/engine/membership';
 import { DEFAULT_PROGRESSION_MODEL } from '@/lib/engine/progression-models';
 import { ruleSchema, type CanonException, type Rule } from '@/lib/engine/rules/types';
-import { DEFAULT_TURN_MODE, resolveTurnMode } from '@/lib/engine/turn-modes';
+import { readActiveMode, resolveTurnMode } from '@/lib/engine/turn-modes';
 import { acceptsSubmissions, assertTransition, type TurnStatus } from '@/lib/engine/turn-state';
 import {
   buildBlockRetryAddendum,
@@ -211,12 +211,26 @@ export async function openTurn(
 ): Promise<Turn> {
   await requireRole(storyId, userId, ['owner', 'gm']);
 
-  const mode = options.mode ?? DEFAULT_TURN_MODE;
+  const supabase = createServiceRoleClient();
+
+  let mode = options.mode;
+  if (mode === undefined) {
+    const { data: story, error: storyError } = await supabase
+      .from('stories')
+      .select('turn_config')
+      .eq('id', storyId)
+      .single();
+
+    if (storyError !== null) {
+      throw new Error(`Failed to read story turn_config: ${storyError.message}`);
+    }
+
+    mode = readActiveMode(story.turn_config);
+  }
   resolveTurnMode(mode); // Reject an unregistered mode before writing.
 
   const sceneSetup = options.sceneSetup ?? null;
 
-  const supabase = createServiceRoleClient();
   // Nullable RPC params are generated as optional rather than `| null`.
   const { data, error } = await supabase.rpc('open_turn', {
     p_story_id: storyId,

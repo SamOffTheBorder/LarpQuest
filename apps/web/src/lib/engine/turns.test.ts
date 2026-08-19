@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   /** Every table mutated, in order. Submissions must never appear. */
   writes: [] as { table: string; op: string }[],
   narrationBehavior: 'succeed' as 'succeed' | 'throw' | 'incomplete',
+  storyTurnConfig: {} as Record<string, unknown>,
 }));
 
 vi.mock('server-only', () => ({}));
@@ -194,7 +195,7 @@ vi.mock('@/lib/supabase/server', () => {
               title: 'Test Story',
               world_ledger: {},
               model_config: null,
-              turn_config: {},
+              turn_config: state.storyTurnConfig,
               content_rating: 'teen',
               conflict_policy: 'narrative_priority',
             },
@@ -271,6 +272,7 @@ beforeEach(() => {
   // Phase 1-4 test's implicit assumption that USER can do everything.
   state.members.set(`${STORY}:${USER}`, 'owner');
   state.narrationBehavior = 'succeed';
+  state.storyTurnConfig = {};
 
   state.turns.set(TURN, {
     id: TURN,
@@ -385,6 +387,48 @@ describe('role gates', () => {
 
     const opened = await openTurn(STORY, USER);
     expect(opened.status).toBe('open');
+  });
+});
+
+describe('turn mode resolution on open', () => {
+  beforeEach(() => {
+    // Publish the fixture turn so a second open is legal.
+    state.turns.set(TURN, { ...turnRow(TURN), status: 'published' });
+  });
+
+  it('uses the story active mode when none is passed explicitly', async () => {
+    const { openTurn } = await import('@/lib/engine/turns');
+
+    state.storyTurnConfig = { active_mode: 'action' };
+
+    const opened = await openTurn(STORY, USER);
+    expect(opened.mode).toBe('action');
+  });
+
+  it('defaults to freeform when the story has no active_mode set', async () => {
+    const { openTurn } = await import('@/lib/engine/turns');
+
+    state.storyTurnConfig = {};
+
+    const opened = await openTurn(STORY, USER);
+    expect(opened.mode).toBe('freeform');
+  });
+
+  it('an explicit mode option overrides the story active mode', async () => {
+    const { openTurn } = await import('@/lib/engine/turns');
+
+    state.storyTurnConfig = { active_mode: 'action' };
+
+    const opened = await openTurn(STORY, USER, { mode: 'dialogue' });
+    expect(opened.mode).toBe('dialogue');
+  });
+
+  it('rejects an unregistered active mode rather than writing it', async () => {
+    const { openTurn } = await import('@/lib/engine/turns');
+
+    state.storyTurnConfig = { active_mode: 'tactical' };
+
+    await expect(openTurn(STORY, USER)).rejects.toThrow(/Unknown turn mode/);
   });
 });
 
