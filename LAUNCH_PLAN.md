@@ -2,9 +2,16 @@
 
 **From "the engine works" to "a website people can actually use."**
 
-Status date: 2026-08-20. Companion to `STORYFORGE_BUILD_PLAN.md`, which remains
-authoritative for engine architecture. This document covers everything the build
-plan deliberately left out: operations, accounts, safety, money, and law.
+Status date: 2026-08-20, revised 2026-08-22. Companion to
+`STORYFORGE_BUILD_PLAN.md`, which remains authoritative for engine
+architecture. This document covers everything the build plan deliberately left
+out: operations, accounts, safety, money, and law.
+
+**Progress since the 08-20 audit** (see `## Completed` at the end for detail):
+items 1–5 of Part 6's "this week" list are done except monitoring, and spend
+caps (A2.1) are implemented. What remains blocking for Tier A is monitoring,
+SMTP, a backup-restore drill, the landing page, and end-to-end verification on
+deployed infrastructure — which cannot be done from this repo alone.
 
 ---
 
@@ -527,3 +534,49 @@ Everything asserted about the current state was checked on 2026-08-20:
 | Landing page is a redirect | `src/app/page.tsx` is 9 lines |
 | Moderation fails open | `FAIL_OPEN_OUTCOME` in `moderate.ts` returns `flag` on model failure |
 | All 8 phases archived | `openspec/changes/archive/` |
+
+---
+
+## Completed
+
+Recorded here as items are finished, so Part 0's audit stays readable as the
+snapshot it was rather than being edited into inaccuracy.
+
+### 2026-08-22 — `1ac704f`, `acd24c3`
+
+**A1.1 Scheduler configured.** `apps/web/vercel.json` declares cron entries for
+all three worker routes (extraction and memory every minute, deadlines every
+five). Vercel Cron issues GET and injects its own non-renameable `CRON_SECRET`,
+so the routes now export GET and POST as one handler and accept either secret
+through a constant-time check in `lib/worker/auth.ts`. `CRON_SECRET` is
+optional; when unset only `WORKER_SECRET` is accepted, so its absence cannot
+widen access. Documented at `docs/architecture/scheduling.md`, including the
+drain-rate ceiling the single-row workers imply and the Vercel Hobby-plan
+constraint on minute-level cron.
+
+*Still open:* A1.2–A1.4 are verification on deployed infrastructure, which
+configuration does not substitute for.
+
+**A2.1 Spend caps.** Enforced in the gateway, not at call sites: `GatewayDeps`
+and `MediaGatewayDeps` carry a required `BudgetGuard`, consulted by all five
+spending entry points. Per-story and per-user caps, nullable, with zero
+distinct from absent. Failure of the check refuses the call rather than
+allowing it. The overshoot under concurrency is documented rather than papered
+over — see `docs/architecture/spend-caps.md`. `/settings/spending` lets a user
+set their cap and see spend to date.
+
+*Still open:* A2.2 (provider-side cap — two minutes, and not doable from this
+repo), A2.3 (cost alerting), A2.4 (decide who pays).
+
+**A3.1 Error boundaries.** Root `error.tsx`, `global-error.tsx`,
+`not-found.tsx`, a story-scoped `error.tsx`, and a story `loading.tsx`. Error
+text is never rendered — a thrown error can carry a database message or a
+prompt fragment — so the digest is shown instead.
+
+**A3.5 CI.** `.github/workflows/ci.yml` runs test, typecheck, and build for
+`apps/web` plus the docs build. The workflow's placeholder environment was
+verified by building against exactly it.
+
+Also: `apps/web/.env.example` was being excluded by a blanket `.env*` ignore
+rule and had never been committed, so nobody cloning the repo could see what to
+configure. Now tracked.
