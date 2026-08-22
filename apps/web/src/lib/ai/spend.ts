@@ -27,8 +27,19 @@ export function createBudgetGuard(
     async assertWithinBudget() {
       const supabase = createServiceRoleClient();
 
+      // The generated RPC arg types are `string`, not `string | null`, because
+      // the type generator does not reflect SQL parameter nullability the way
+      // it does for table columns. The function's own SQL signature
+      // (target_story_id uuid, target_user_id uuid — no `not null`) genuinely
+      // accepts null, and the migration relies on it: a call with only a
+      // storyId passes userId as null and vice versa. Cast at this one
+      // boundary rather than widening the generated type by hand, which the
+      // next `db:types` run would only overwrite anyway.
       const { data: spend, error: spendError } = await supabase
-        .rpc('spend_to_date', { target_story_id: storyId, target_user_id: userId })
+        .rpc('spend_to_date', {
+          target_story_id: storyId,
+          target_user_id: userId,
+        } as { target_story_id: string; target_user_id: string })
         .single();
 
       if (spendError !== null) {
