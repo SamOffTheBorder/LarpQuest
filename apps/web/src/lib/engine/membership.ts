@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { createServiceRoleClient } from '@/lib/supabase/server';
+import { getUsernames } from '@/lib/engine/profiles';
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
  * Membership checks for service-role code paths.
@@ -79,6 +80,10 @@ export interface StoryMember {
   userId: string;
   role: StoryRole;
   joinedAt: string;
+  /** Which invite admitted them, or null for the owner and pre-attribution joins. */
+  joinedViaInvite: string | null;
+  /** Display name, or a fallback when the account has not set one. */
+  username: string | null;
 }
 
 /** List a story's members. Membership is checked before any read. */
@@ -88,7 +93,7 @@ export async function listMembers(storyId: string, userId: string): Promise<Stor
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('story_members')
-    .select('user_id, role, joined_at')
+    .select('user_id, role, joined_at, joined_via_invite')
     .eq('story_id', storyId)
     .order('joined_at');
 
@@ -96,10 +101,14 @@ export async function listMembers(storyId: string, userId: string): Promise<Stor
     throw new Error(`Failed to list story members: ${error.message}`);
   }
 
+  const usernames = await getUsernames(data.map((row) => row.user_id));
+
   return data.map((row) => ({
     userId: row.user_id,
     role: row.role as StoryRole,
     joinedAt: row.joined_at,
+    joinedViaInvite: row.joined_via_invite,
+    username: usernames.get(row.user_id) ?? null,
   }));
 }
 
@@ -195,5 +204,39 @@ export async function removeMember(
 
   if (deleteError !== null) {
     throw new Error(`Failed to remove member: ${deleteError.message}`);
+  }
+}
+
+export class OwnerCannotLeaveError extends Error {
+  constructor(readonly storyId: string) {
+    super('Transfer ownership to another member before leaving this story.');
+    this.name = 'OwnerCannotLeaveError';
+  }
+}
+
+/**
+ * Leave a story under your own power, rather than waiting for an owner/GM to
+ * eject you. Delegates to leave_story, which releases the caller's entities
+ * and deletes their membership atomically, and refuses the owner — a story
+ * with members and no owner can never be managed again.
+ *
+ * Runs under the caller's session (the RPC reads auth.uid()), never the
+ * service-role client, which carries no user session.
+ */
+export async function leaveStory(storyId: string): Promise<void> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc('leave_story', { p_story_id: storyId });
+
+  if (error !== null) {
+    if (error.message.includes('owner_cannot_leave')) {
+      throw new OwnerCannotLeaveError(storyId);
+    }
+
+    if (error.message.includes('not_a_member')) {
+      throw new NotAMemberError(storyId, '(session)');
+    }
+
+    throw new Error(`Failed to leave story: ${error.message}`);
   }
 }

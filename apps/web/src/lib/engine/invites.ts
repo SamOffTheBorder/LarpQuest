@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 import { requireRole } from '@/lib/engine/membership';
+import { getUsernames } from '@/lib/engine/profiles';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
@@ -29,6 +30,12 @@ export const createInviteInputSchema = z.object({
 
 export type CreateInviteInput = z.infer<typeof createInviteInputSchema>;
 
+/** Someone who joined through a given invite. */
+export interface InviteJoiner {
+  userId: string;
+  username: string | null;
+}
+
 export interface Invite {
   id: string;
   storyId: string;
@@ -38,6 +45,8 @@ export interface Invite {
   revokedAt: string | null;
   maxUses: number | null;
   useCount: number;
+  /** Populated by listInvites; empty elsewhere. */
+  joiners: InviteJoiner[];
 }
 
 interface InviteRow {
@@ -61,6 +70,7 @@ function toInvite(row: InviteRow): Invite {
     revokedAt: row.revoked_at,
     maxUses: row.max_uses,
     useCount: row.use_count,
+    joiners: [],
   };
 }
 
@@ -73,7 +83,12 @@ export class InviteNotFoundError extends Error {
   }
 }
 
-/** Owner or GM only. */
+/**
+ * Owner or GM only. Revoked invites are excluded: a revoked link is not an
+ * actionable row — it cannot be copied or revoked again — so it is noise on
+ * the members page. The row itself is deliberately kept (revocation is an
+ * update, not a delete) so members admitted through it keep their attribution.
+ */
 export async function listInvites(storyId: string, userId: string): Promise<Invite[]> {
   await requireRole(storyId, userId, ['owner', 'gm']);
 
@@ -82,13 +97,42 @@ export async function listInvites(storyId: string, userId: string): Promise<Invi
     .from('story_invites')
     .select(INVITE_COLUMNS)
     .eq('story_id', storyId)
+    .is('revoked_at', null)
     .order('created_at', { ascending: false });
 
   if (error !== null) {
     throw new Error(`Failed to list invites: ${error.message}`);
   }
 
-  return data.map(toInvite);
+  const invites = data.map(toInvite);
+
+  // Who came in through each link. One read for the whole story rather than
+  // one per invite, then grouped in memory.
+  const { data: members, error: memberError } = await supabase
+    .from('story_members')
+    .select('user_id, joined_via_invite')
+    .eq('story_id', storyId)
+    .not('joined_via_invite', 'is', null);
+
+  if (memberError !== null) {
+    throw new Error(`Failed to resolve invite usage: ${memberError.message}`);
+  }
+
+  const usernames = await getUsernames(members.map((row) => row.user_id));
+  const byInvite = new Map<string, InviteJoiner[]>();
+
+  for (const row of members) {
+    const inviteId = row.joined_via_invite;
+    if (inviteId === null) {
+      continue;
+    }
+
+    const list = byInvite.get(inviteId) ?? [];
+    list.push({ userId: row.user_id, username: usernames.get(row.user_id) ?? null });
+    byInvite.set(inviteId, list);
+  }
+
+  return invites.map((invite) => ({ ...invite, joiners: byInvite.get(invite.id) ?? [] }));
 }
 
 /** Owner or GM only. Ownership is never grantable via invite. */

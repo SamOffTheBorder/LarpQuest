@@ -3,12 +3,14 @@ import { notFound } from 'next/navigation';
 
 import { requireUser } from '@/lib/auth';
 import { listEntities } from '@/lib/engine/entities';
+import { listMembers } from '@/lib/engine/membership';
+import { fallbackName } from '@/lib/engine/profiles';
 import { StoryNotFoundError, getStory } from '@/lib/engine/stories';
 import { getUniverseVersion } from '@/lib/engine/universes';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { ClaimButton } from '@/app/stories/[storyId]/entities/claim-button';
+import { AssignControl } from '@/app/stories/[storyId]/entities/assign-control';
 import { NewEntityForm } from '@/app/stories/[storyId]/entities/new-entity-form';
 import { NewSchemaEntityForm } from '@/app/stories/[storyId]/entities/entity-fields/new-schema-entity-form';
 
@@ -30,7 +32,22 @@ export default async function EntitiesPage({
     throw error;
   }
 
-  const entities = await listEntities(storyId, user.id);
+  const [entities, members] = await Promise.all([
+    listEntities(storyId, user.id),
+    listMembers(storyId, user.id),
+  ]);
+
+  const canAssign = members.some(
+    (member) => member.userId === user.id && (member.role === 'owner' || member.role === 'gm'),
+  );
+
+  // Spectators are excluded: they watch, they do not hold characters.
+  const assignable = members
+    .filter((member) => member.role !== 'spectator')
+    .map((member) => ({
+      userId: member.userId,
+      label: member.username ?? fallbackName(member.userId),
+    }));
 
   // A pinned universe gets the dynamic schema-driven form, one per entity
   // type; an unpinned (Phase 1) story keeps the freeform type+data form.
@@ -75,11 +92,13 @@ export default async function EntitiesPage({
                   </div>
                   <div className="flex items-center gap-2">
                     {entity.status !== 'active' && <Badge variant="secondary">{entity.status}</Badge>}
-                    <ClaimButton
+                    <AssignControl
                       storyId={storyId}
                       entityId={entity.id}
                       controlledBy={entity.controlledBy}
                       currentUserId={user.id}
+                      members={assignable}
+                      canAssign={canAssign}
                     />
                   </div>
                 </CardHeader>

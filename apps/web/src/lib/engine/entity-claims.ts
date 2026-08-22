@@ -4,25 +4,18 @@ import { assertMember, requireRole } from '@/lib/engine/membership';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
- * Entity claiming. `entities.controlled_by` is a real, enforced field — a
- * player claims an entity to submit actions for it, and only its controller
- * (or a GM) may submit on its behalf. See entity-claiming spec.
+ * Entity control. `entities.controlled_by` is a real, enforced field — only an
+ * entity's controller (or a GM) may submit actions on its behalf.
+ *
+ * Control is granted by the GM, not taken: the GM casts the story, assigning
+ * characters to players and to themselves. A player may release a character
+ * they hold, but cannot pick one up unilaterally.
  */
 
 export class EntityNotFoundError extends Error {
   constructor(readonly entityId: string) {
     super(`Entity ${entityId} not found.`);
     this.name = 'EntityNotFoundError';
-  }
-}
-
-export class EntityAlreadyControlledError extends Error {
-  constructor(
-    readonly entityId: string,
-    readonly controlledBy: string,
-  ) {
-    super(`Entity ${entityId} is already controlled by ${controlledBy}.`);
-    this.name = 'EntityAlreadyControlledError';
   }
 }
 
@@ -50,27 +43,11 @@ async function loadEntityControl(entityId: string): Promise<EntityControlRow> {
   return data;
 }
 
-/** A player claims an unclaimed entity. Rejected if already controlled by someone else. */
-export async function claimEntity(entityId: string, userId: string): Promise<void> {
-  const entity = await loadEntityControl(entityId);
-  await assertMember(entity.story_id, userId);
-
-  if (entity.controlled_by !== null && entity.controlled_by !== userId) {
-    throw new EntityAlreadyControlledError(entityId, entity.controlled_by);
-  }
-
-  const supabase = createServiceRoleClient();
-  const { error } = await supabase
-    .from('entities')
-    .update({ controlled_by: userId })
-    .eq('id', entityId);
-
-  if (error !== null) {
-    throw new Error(`Failed to claim entity: ${error.message}`);
-  }
-}
-
-/** The controller (or a GM/owner) releases a claim, leaving the entity unclaimed. */
+/**
+ * The controller (or a GM/owner) releases a claim, leaving the entity
+ * unclaimed. A player can always put a character down; only a GM can hand one
+ * out (see assignEntity).
+ */
 export async function releaseEntity(entityId: string, userId: string): Promise<void> {
   const entity = await loadEntityControl(entityId);
 
@@ -89,14 +66,27 @@ export async function releaseEntity(entityId: string, userId: string): Promise<v
   }
 }
 
-/** GM/owner only. May override an existing controller. */
-export async function reassignEntity(
+/**
+ * GM/owner assigns a character to a member — the only way control is granted.
+ * Players do not self-claim: the GM casts the story, including casting
+ * themselves (passing their own id is ordinary, not a special case).
+ *
+ * May override an existing controller, so a GM can recast without asking the
+ * current player to release first. Passing null unassigns.
+ */
+export async function assignEntity(
   entityId: string,
   actingUserId: string,
   newControllerId: string | null,
 ): Promise<void> {
   const entity = await loadEntityControl(entityId);
   await requireRole(entity.story_id, actingUserId, ['owner', 'gm']);
+
+  // The target must be in the story; otherwise a character could be assigned
+  // to a stranger, or to someone who has since left.
+  if (newControllerId !== null) {
+    await assertMember(entity.story_id, newControllerId);
+  }
 
   const supabase = createServiceRoleClient();
   const { error } = await supabase
@@ -105,6 +95,6 @@ export async function reassignEntity(
     .eq('id', entityId);
 
   if (error !== null) {
-    throw new Error(`Failed to reassign entity: ${error.message}`);
+    throw new Error(`Failed to assign entity: ${error.message}`);
   }
 }

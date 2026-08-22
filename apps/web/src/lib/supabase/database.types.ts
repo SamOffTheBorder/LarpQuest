@@ -645,6 +645,27 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
       proposals: {
         Row: {
           created_at: string
@@ -924,23 +945,33 @@ export type Database = {
       story_members: {
         Row: {
           joined_at: string
+          joined_via_invite: string | null
           role: string
           story_id: string
           user_id: string
         }
         Insert: {
           joined_at?: string
+          joined_via_invite?: string | null
           role: string
           story_id: string
           user_id: string
         }
         Update: {
           joined_at?: string
+          joined_via_invite?: string | null
           role?: string
           story_id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "story_members_joined_via_invite_fkey"
+            columns: ["joined_via_invite"]
+            isOneToOne: false
+            referencedRelation: "story_invites"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "story_members_story_id_fkey"
             columns: ["story_id"]
@@ -1610,6 +1641,7 @@ export type Database = {
           story_id: string
         }[]
       }
+      leave_story: { Args: { p_story_id: string }; Returns: undefined }
       match_arc_summaries: {
         Args: {
           p_match_count?: number

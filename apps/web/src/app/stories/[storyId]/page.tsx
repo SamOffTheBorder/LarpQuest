@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { requireUser } from '@/lib/auth';
 import { listChapters } from '@/lib/engine/chapters';
 import { listEntities } from '@/lib/engine/entities';
-import { isOwner } from '@/lib/engine/membership';
+import { isOwner, listMembers } from '@/lib/engine/membership';
 import { StoryNotFoundError, getStory } from '@/lib/engine/stories';
 import { getLiveTurn, listSubmissionsForTurn } from '@/lib/engine/turns';
 import { getStoryCostUsd } from '@/lib/engine/usage-summary';
@@ -35,17 +35,27 @@ export default async function StoryPage({
     throw error;
   }
 
-  const [chapters, liveTurn, costUsd, owner, entities] = await Promise.all([
+  const [chapters, liveTurn, costUsd, owner, entities, members] = await Promise.all([
     listChapters(storyId, user.id),
     getLiveTurn(storyId, user.id),
     getStoryCostUsd(storyId, user.id),
     isOwner(storyId, user.id),
     listEntities(storyId, user.id),
+    listMembers(storyId, user.id),
   ]);
 
   const claimedEntityIds = entities
     .filter((entity) => entity.controlledBy !== null)
     .map((entity) => entity.id);
+
+  // Owner and GM share the same story-action authority, so both get the
+  // GM sections.
+  const myRole = members.find((member) => member.userId === user.id)?.role ?? null;
+  const isGM = myRole === 'owner' || myRole === 'gm';
+
+  const myCharacters = entities
+    .filter((entity) => entity.controlledBy === user.id)
+    .map((entity) => ({ id: entity.id, name: entity.name }));
 
   const submissions =
     liveTurn !== null ? await listSubmissionsForTurn(liveTurn.id, user.id) : [];
@@ -100,6 +110,8 @@ export default async function StoryPage({
         submissions={submissions}
         userId={user.id}
         claimedEntityIds={claimedEntityIds}
+        myCharacters={myCharacters}
+        isGM={isGM}
       />
 
       <div className="flex flex-col gap-4">

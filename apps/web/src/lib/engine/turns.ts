@@ -131,10 +131,13 @@ export class NotEntityControllerError extends Error {
 }
 
 /**
- * A submission targeting a claimed entity may only be made by that entity's
- * controller, unless the caller is owner/gm (who may submit on behalf of an
- * unclaimed or absent-player entity, per build plan 7.4). An unclaimed
- * entity (controlled_by null) remains submittable by any member.
+ * A submission targeting an entity may only be made by that entity's
+ * controller, or by owner/gm — who may submit on behalf of an unclaimed or
+ * absent-player entity, per build plan 7.4.
+ *
+ * An unclaimed entity is GM-only rather than open to any member: control is
+ * granted by the GM (see entity-claims), so letting a player act for a
+ * character they were never cast in would route around that entirely.
  */
 async function assertCanSubmitForEntity(
   storyId: string,
@@ -158,7 +161,7 @@ async function assertCanSubmitForEntity(
 
   const controlledBy = data?.controlled_by ?? null;
 
-  if (controlledBy === null || controlledBy === userId) {
+  if (controlledBy === userId) {
     return;
   }
 

@@ -266,7 +266,7 @@ vi.mock('@/lib/supabase/server', () => {
 });
 
 const { createInvite, joinViaInvite } = await import('@/lib/engine/invites');
-const { claimEntity } = await import('@/lib/engine/entity-claims');
+const { assignEntity } = await import('@/lib/engine/entity-claims');
 const { createSubmission, openTurn } = await import('@/lib/engine/turns');
 const { sweepDeadlines } = await import('@/lib/engine/deadlines');
 
@@ -295,7 +295,7 @@ beforeEach(() => {
 });
 
 describe('Phase 5 exit criterion: five people coordinate through the app, not outside it', () => {
-  it('a second player joins by invite, claims a character, and only they may act for it', async () => {
+  it('a second player joins by invite, is cast in a character, and only they may act for it', async () => {
     const invite = await createInvite(STORY, OWNER, { role: 'player', expiresInDays: 7, maxUses: null });
     const result = await joinViaInvite(invite.token);
 
@@ -303,10 +303,11 @@ describe('Phase 5 exit criterion: five people coordinate through the app, not ou
     expect(state.members.get(`${STORY}:${PLAYER_2}`)?.role).toBe('player');
 
     state.entities.set(ENTITY_2, { id: ENTITY_2, story_id: STORY, name: 'Bram', controlled_by: null });
-    await claimEntity(ENTITY_2, PLAYER_2);
+    // The owner casts the new player — control is granted by a GM, not taken.
+    await assignEntity(ENTITY_2, OWNER, PLAYER_2);
     expect(state.entities.get(ENTITY_2)?.controlled_by).toBe(PLAYER_2);
 
-    // A different, uninvolved member cannot act for the newly claimed entity.
+    // A different, uninvolved member cannot act for the newly assigned entity.
     state.members.set(`${STORY}:intruder`, { role: 'player' });
     state.turns.set('turn-1', {
       id: 'turn-1',

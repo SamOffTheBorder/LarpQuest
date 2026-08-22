@@ -1,14 +1,26 @@
 import { requireUser } from '@/lib/auth';
+import { getProfile } from '@/lib/engine/profiles';
 import { DeleteAccountForm } from '@/app/settings/account/delete-account-form';
+import { UsernameForm } from '@/app/settings/account/username-form';
 
 export default async function AccountSettingsPage() {
   const user = await requireUser();
+  const profile = await getProfile(user.id);
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
       <div>
         <h1 className="font-heading text-xl font-semibold sm:text-2xl">Account</h1>
         <p className="text-sm text-muted-foreground">Signed in as {user.email}.</p>
+      </div>
+
+      <div className="rounded-lg border p-4">
+        <h2 className="font-medium">Display name</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          How you appear to other people in your stories. Without one, you show up as a partial
+          account id.
+        </p>
+        <UsernameForm current={profile?.username ?? null} />
       </div>
 
       <div className="rounded-lg border border-destructive/30 p-4">

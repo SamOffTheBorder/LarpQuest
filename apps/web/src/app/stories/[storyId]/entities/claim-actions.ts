@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireUser } from '@/lib/auth';
-import { claimEntity, releaseEntity } from '@/lib/engine/entity-claims';
+import { assignEntity, releaseEntity } from '@/lib/engine/entity-claims';
 
 export type ClaimActionState = {
   status: 'idle' | 'error';
@@ -16,16 +16,22 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
 }
 
-export async function claimEntityAction(storyId: string, entityId: string): Promise<ClaimActionState> {
+/** GM/owner only. `controllerId` of null unassigns the character. */
+export async function assignEntityAction(
+  storyId: string,
+  entityId: string,
+  controllerId: string | null,
+): Promise<ClaimActionState> {
   const user = await requireUser();
 
   try {
-    await claimEntity(entityId, user.id);
+    await assignEntity(entityId, user.id, controllerId);
   } catch (error) {
     return { status: 'error', message: errorMessage(error) };
   }
 
   revalidatePath(`/stories/${storyId}/entities`);
+  revalidatePath(`/stories/${storyId}`);
   return initialIdle;
 }
 
@@ -39,5 +45,6 @@ export async function releaseEntityAction(storyId: string, entityId: string): Pr
   }
 
   revalidatePath(`/stories/${storyId}/entities`);
+  revalidatePath(`/stories/${storyId}`);
   return initialIdle;
 }

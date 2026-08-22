@@ -42,28 +42,24 @@ export function InviteList({ storyId, invites }: { storyId: string; invites: Inv
 
   return (
     <div className="flex flex-col gap-2">
+      {/* Revoked invites are filtered out server-side, so every row here is live or expired. */}
       {invites.map((invite) => {
         const expired = new Date(invite.expiresAt).getTime() < Date.now();
-        const revoked = invite.revokedAt !== null;
 
         return (
-          <div
-            key={invite.id}
-            className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm"
-          >
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">{invite.role}</Badge>
-              {revoked && <Badge variant="destructive">Revoked</Badge>}
-              {!revoked && expired && <Badge variant="secondary">Expired</Badge>}
-              <span className="text-muted-foreground">{invite.useCount} joined</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {!revoked && !expired && (
-                <Button variant="ghost" size="sm" onClick={() => copyLink(invite)}>
-                  {copiedId === invite.id ? 'Copied' : 'Copy link'}
-                </Button>
-              )}
-              {!revoked && (
+          <div key={invite.id} className="flex flex-col gap-2 rounded-md border p-2 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{invite.role}</Badge>
+                {expired && <Badge variant="secondary">Expired</Badge>}
+                <span className="text-muted-foreground">{invite.useCount} joined</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {!expired && (
+                  <Button variant="ghost" size="sm" onClick={() => copyLink(invite)}>
+                    {copiedId === invite.id ? 'Copied' : 'Copy link'}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -72,8 +68,17 @@ export function InviteList({ storyId, invites }: { storyId: string; invites: Inv
                 >
                   Revoke
                 </Button>
-              )}
+              </div>
             </div>
+
+            {invite.joiners.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Joined:{' '}
+                {invite.joiners
+                  .map((joiner) => joiner.username ?? `Player ${joiner.userId.slice(0, 8)}`)
+                  .join(', ')}
+              </p>
+            )}
           </div>
         );
       })}

@@ -474,12 +474,21 @@ describe('entity control on submissions', () => {
     expect(submission.entityId).toBe(ENTITY);
   });
 
-  it('any member can submit for an unclaimed entity', async () => {
+  it('a player cannot submit for an unclaimed entity they were never cast in', async () => {
+    const { createSubmission, NotEntityControllerError } = await import('@/lib/engine/turns');
+    state.entities.set(UNCLAIMED_ENTITY, { id: UNCLAIMED_ENTITY, controlled_by: null });
+
+    await expect(
+      createSubmission(TURN, OTHER_PLAYER, { content: 'I step in.', entityId: UNCLAIMED_ENTITY }),
+    ).rejects.toThrow(NotEntityControllerError);
+  });
+
+  it('owner/gm can submit for an unclaimed entity, narrating an NPC', async () => {
     const { createSubmission } = await import('@/lib/engine/turns');
     state.entities.set(UNCLAIMED_ENTITY, { id: UNCLAIMED_ENTITY, controlled_by: null });
 
-    const submission = await createSubmission(TURN, OTHER_PLAYER, {
-      content: 'I step in.',
+    const submission = await createSubmission(TURN, USER, {
+      content: 'The innkeeper looks up.',
       entityId: UNCLAIMED_ENTITY,
     });
 

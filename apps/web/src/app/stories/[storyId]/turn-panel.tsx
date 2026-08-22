@@ -12,6 +12,11 @@ import type { Story } from '@/lib/engine/stories';
 import type { Submission, Turn } from '@/lib/engine/turns';
 import { useStoryPresence, useTurnPresence } from '@/lib/realtime/presence';
 
+export interface ControlledCharacter {
+  id: string;
+  name: string;
+}
+
 interface TurnPanelProps {
   storyId: string;
   story: Story;
@@ -19,6 +24,10 @@ interface TurnPanelProps {
   submissions: Submission[];
   userId: string;
   claimedEntityIds: string[];
+  /** Characters the viewer controls; drives one action form each. */
+  myCharacters: ControlledCharacter[];
+  /** Owner/GM, who additionally gets the story-action form. */
+  isGM: boolean;
 }
 
 type StreamEvent =
@@ -34,6 +43,8 @@ export function TurnPanel({
   submissions,
   userId,
   claimedEntityIds,
+  myCharacters,
+  isGM,
 }: TurnPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -136,7 +147,14 @@ export function TurnPanel({
     );
   }
 
-  const mySubmission = submissions.find((submission) => submission.userId === userId) ?? null;
+  const mine = submissions.filter((submission) => submission.userId === userId);
+
+  // A story action is the GM's submission with no character attached; a
+  // character action carries the entity. Splitting on entityId keeps the two
+  // kinds independently editable within one turn.
+  const myStoryAction = mine.find((submission) => submission.entityId === null) ?? null;
+  const submissionForEntity = (entityId: string) =>
+    mine.find((submission) => submission.entityId === entityId) ?? null;
 
   return (
     <Card>
@@ -156,7 +174,49 @@ export function TurnPanel({
 
         {turn.status === 'open' && (
           <>
-            <SubmissionForm storyId={storyId} turnId={turn.id} existing={mySubmission} />
+            {isGM && (
+              <section className="flex flex-col gap-2 rounded-md border border-border p-3">
+                <h3 className="text-sm font-semibold">GM — Story action</h3>
+                <p className="text-xs text-muted-foreground">
+                  Narrate the world: weather, NPCs, consequences. Carries no character.
+                </p>
+                <SubmissionForm
+                  storyId={storyId}
+                  turnId={turn.id}
+                  existing={myStoryAction}
+                  entityId={null}
+                  label="What happens in the world?"
+                  placeholder="A storm rolls in over the city…"
+                />
+              </section>
+            )}
+
+            {myCharacters.map((character) => (
+              <section
+                key={character.id}
+                className="flex flex-col gap-2 rounded-md border border-border p-3"
+              >
+                <h3 className="text-sm font-semibold">
+                  {isGM ? `GM — Character action · ${character.name}` : character.name}
+                </h3>
+                <SubmissionForm
+                  storyId={storyId}
+                  turnId={turn.id}
+                  existing={submissionForEntity(character.id)}
+                  entityId={character.id}
+                  label={`What does ${character.name} do?`}
+                  placeholder={`Describe ${character.name}'s action this turn…`}
+                />
+              </section>
+            ))}
+
+            {!isGM && myCharacters.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                You don&apos;t control a character yet. A GM assigns characters from the entities
+                page.
+              </p>
+            )}
+
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 {submissions.length} submission{submissions.length === 1 ? '' : 's'} so far

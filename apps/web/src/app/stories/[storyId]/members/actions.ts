@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth';
 import { createInvite, inviteRoleSchema, joinViaInvite, revokeInvite } from '@/lib/engine/invites';
 import { assertWithinRateLimit, RateLimitExceededError } from '@/lib/rate-limit';
-import { removeMember } from '@/lib/engine/membership';
+import { leaveStory, removeMember } from '@/lib/engine/membership';
 import { transferStoryOwnership } from '@/lib/engine/ownership-transfer';
 
 export type MemberActionState = {
@@ -90,6 +90,24 @@ export async function joinStoryAction(
   } catch (error) {
     return { status: 'error', message: errorMessage(error) };
   }
+}
+
+/**
+ * Leave a story under your own power. On success the caller is no longer a
+ * member, so the story page would 404 for them — the client redirects to the
+ * story list instead of revalidating a page they can no longer read.
+ */
+export async function leaveStoryAction(storyId: string): Promise<MemberActionState> {
+  await requireUser();
+
+  try {
+    await leaveStory(storyId);
+  } catch (error) {
+    return { status: 'error', message: errorMessage(error) };
+  }
+
+  revalidatePath('/stories');
+  return initialIdle;
 }
 
 export async function transferOwnershipAction(storyId: string, newOwnerId: string): Promise<MemberActionState> {

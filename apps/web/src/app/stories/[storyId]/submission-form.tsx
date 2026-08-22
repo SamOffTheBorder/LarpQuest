@@ -13,25 +13,37 @@ export function SubmissionForm({
   storyId,
   turnId,
   existing,
+  entityId = null,
+  label,
+  placeholder,
 }: {
   storyId: string;
   turnId: string;
   existing: Submission | null;
+  /** Fixed entity this form submits for; null submits with no entity attached. */
+  entityId?: string | null;
+  label?: string;
+  placeholder?: string;
 }) {
   const boundAction = submitAction.bind(null, storyId, turnId);
   const [state, action, pending] = useActionState(boundAction, initialState);
 
+  const fieldId = `content-${entityId ?? 'none'}`;
+  const resolvedLabel = label ?? 'What do you do?';
+
   return (
     <form action={action} className="flex flex-col gap-2">
       <input type="hidden" name="submissionId" value={existing?.id ?? ''} />
-      <label htmlFor="content" className="text-sm font-medium">
-        {existing !== null ? 'Your action (editing)' : 'What do you do?'}
+      <input type="hidden" name="entityId" value={entityId ?? ''} />
+      <label htmlFor={fieldId} className="text-sm font-medium">
+        {resolvedLabel}
+        {existing !== null && ' (editing)'}
       </label>
       <Textarea
-        id="content"
+        id={fieldId}
         name="content"
         defaultValue={existing?.content ?? ''}
-        placeholder="Describe your character's action this turn…"
+        placeholder={placeholder ?? "Describe your character's action this turn…"}
         required
         rows={3}
       />
