@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { ModelConfig } from '@/lib/ai/roles';
 import { resolveModel } from '@/lib/ai/roles';
-import type { UsageRecorder } from '@/lib/ai/gateway';
+import type { BudgetGuard, UsageRecorder } from '@/lib/ai/gateway';
 
 /**
  * The media gateway: image and video generation.
@@ -33,6 +33,12 @@ export interface MediaGatewayDeps {
   videoProviderBaseUrl?: string;
   fetchImpl?: typeof fetch;
   usage: UsageRecorder;
+  /**
+   * Same hard stop as the text gateway. Image and video calls are among the
+   * most expensive per call in the system, so exempting them would leave the
+   * largest hole in the cap.
+   */
+  budget: BudgetGuard;
 }
 
 export class MediaGenerationError extends Error {
@@ -90,6 +96,8 @@ export async function generateImage(
   deps: MediaGatewayDeps,
   args: GenerateImageArgs,
 ): Promise<GenerateImageResult> {
+  await deps.budget.assertWithinBudget();
+
   const resolved = resolveModel('illustrator', args.modelConfig);
   const doFetch = deps.fetchImpl ?? fetch;
 
@@ -196,6 +204,8 @@ export async function generateVideo(
   deps: MediaGatewayDeps,
   args: GenerateVideoArgs,
 ): Promise<GenerateVideoResult> {
+  await deps.budget.assertWithinBudget();
+
   const resolved = resolveModel('videographer', args.modelConfig);
   const doFetch = deps.fetchImpl ?? fetch;
   const baseUrl = deps.videoProviderBaseUrl ?? 'https://api.video-provider.example/v1';

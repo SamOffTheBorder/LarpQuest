@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { callStructured, embedText, StructuredOutputError, EmbeddingError, type UsageRecorder } from '@/lib/ai/gateway';
+import { callStructured, embedText, StructuredOutputError, EmbeddingError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
 import { ARC_SUMMARY_SYSTEM_PROMPT, buildArcSummaryPrompt, type ArcChapterSummaryInput } from '@/lib/memory/prompts';
 import { arcSummaryResultSchema, type RetrievalBias } from '@/lib/memory/schemas';
@@ -59,6 +59,7 @@ export interface GenerateArcSummaryArgs {
   modelConfig: ModelConfig | null | undefined;
   retrievalBias: RetrievalBias;
   usage: UsageRecorder;
+  budget: BudgetGuard;
 }
 
 /**
@@ -67,7 +68,7 @@ export interface GenerateArcSummaryArgs {
  * "retrieve at arc granularity for distant history."
  */
 export async function generateArcSummary(args: GenerateArcSummaryArgs): Promise<ArcSummaryOutcome> {
-  const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage };
+  const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget };
 
   let summaryText: string;
   try {

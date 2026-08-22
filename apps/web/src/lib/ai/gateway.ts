@@ -9,10 +9,11 @@ import { resolveModel } from '@/lib/ai/roles';
  * The OpenRouter gateway.
  *
  * This is the only module that talks to OpenRouter. Every call goes through
- * `callStructured` or `streamNarration`, both of which resolve their model
- * from a role, and both of which report usage through the injected
- * `UsageRecorder` — including on failure, since a provider may have already
- * billed tokens by the time an error surfaces.
+ * `callStructured`, `embedText`, or `streamNarration`. All three resolve their
+ * model from a role, check the injected `BudgetGuard` before spending, and
+ * report usage through the injected `UsageRecorder` — including on failure,
+ * since a provider may have already billed tokens by the time an error
+ * surfaces.
  *
  * The HTTP client is injected as `fetchImpl` so tests never hit the network.
  */
@@ -31,10 +32,24 @@ export interface UsageRecorder {
   }): Promise<void>;
 }
 
+/**
+ * Pre-call spend enforcement. Throws `SpendCapExceededError` when the story or
+ * user has reached its cap.
+ *
+ * Injected alongside the UsageRecorder rather than called at the call sites,
+ * for the same reason model resolution lives here: a check a call site can
+ * forget is not a hard stop. See `lib/ai/budget.ts` for the policy and
+ * `lib/ai/spend.ts` for the implementation.
+ */
+export interface BudgetGuard {
+  assertWithinBudget(): Promise<void>;
+}
+
 export interface GatewayDeps {
   apiKey: string;
   fetchImpl?: typeof fetch;
   usage: UsageRecorder;
+  budget: BudgetGuard;
 }
 
 interface OpenRouterUsage {
@@ -152,6 +167,10 @@ export async function callStructured<T>(
   deps: GatewayDeps,
   args: CallStructuredArgs<T>,
 ): Promise<{ data: T; resolvedModel: string; usedFallbackModel: boolean }> {
+  // Before the retry loop, not inside it: the retry is part of one logical
+  // call, and its tokens are already billed to the same budget.
+  await deps.budget.assertWithinBudget();
+
   const resolved = resolveModel(args.role, args.modelConfig);
 
   let userPrompt = args.userPrompt;
@@ -264,6 +283,8 @@ export async function embedText(
   deps: GatewayDeps,
   args: EmbedTextArgs,
 ): Promise<{ embedding: number[]; resolvedModel: string; usedFallbackModel: boolean }> {
+  await deps.budget.assertWithinBudget();
+
   const resolved = resolveModel('embedder', args.modelConfig);
   const doFetch = deps.fetchImpl ?? fetch;
 
@@ -370,6 +391,8 @@ export async function streamNarration(
   deps: GatewayDeps,
   args: StreamNarrationArgs,
 ): Promise<StreamNarrationResult> {
+  await deps.budget.assertWithinBudget();
+
   const resolved = resolveModel('narrator', args.modelConfig);
 
   const response = await postChatCompletion(deps, {

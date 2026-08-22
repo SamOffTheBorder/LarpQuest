@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { allowAllBudget } from '@/lib/ai/budget.test-helpers';
 
 /**
  * The Gatekeeper (gatekeeper capability), tested against a mocked
@@ -98,6 +99,7 @@ describe('evaluateProposal', () => {
       canonExceptions: [],
       modelConfig: null,
       usage: nullUsage,
+      budget: allowAllBudget,
     });
 
     expect(verdict.verdict).toBe('reject');
@@ -124,6 +126,7 @@ describe('evaluateProposal', () => {
         canonExceptions: [],
         modelConfig: null,
         usage: nullUsage,
+        budget: allowAllBudget,
       }),
     ).rejects.toThrow(GatekeeperOutputError);
 
@@ -143,6 +146,7 @@ describe('evaluateProposal', () => {
       canonExceptions: [{ ruleId: 'gatekeeper.proposal', entityId: null, capabilityId: null }],
       modelConfig: null,
       usage: nullUsage,
+      budget: allowAllBudget,
     });
 
     expect(suppressed).toBe(true);
@@ -162,6 +166,7 @@ describe('evaluateProposal', () => {
       canonExceptions: [{ ruleId: 'gatekeeper.proposal', entityId: 'some-other-entity', capabilityId: null }],
       modelConfig: null,
       usage: nullUsage,
+      budget: allowAllBudget,
     });
 
     expect(suppressed).toBe(false);
@@ -182,6 +187,7 @@ describe('evaluateProposal', () => {
       canonExceptions: [],
       modelConfig: null,
       usage,
+      budget: allowAllBudget,
     });
 
     // The gateway itself records usage internally (see gateway.ts); this
@@ -202,6 +208,7 @@ describe('evaluateProposal', () => {
       canonExceptions: [],
       modelConfig: null,
       usage: nullUsage,
+      budget: allowAllBudget,
     });
 
     await evaluateProposal({
@@ -214,6 +221,7 @@ describe('evaluateProposal', () => {
       canonExceptions: [],
       modelConfig: null,
       usage: nullUsage,
+      budget: allowAllBudget,
     });
 
     expect(state.insertedProposals).toHaveLength(2);

@@ -4,6 +4,7 @@ import type { GetStepTools } from 'inngest';
 
 import { inngest } from '@/inngest/client';
 import { markJob, persistDraft } from '@/inngest/functions/run-research-pipeline';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { applyStageOutput, draftDocumentSchema, type DraftDocument } from '@/lib/research/draft';
 import { runStage } from '@/lib/research/pipeline';
@@ -66,6 +67,9 @@ export const rerunResearchStage = inngest.createFunction(
       const input = draftRow.input as unknown as DraftInput;
       const draft: DraftDocument = draftDocumentSchema.parse(draftRow.draft ?? {});
       const usage = createUsageRecorder(null, draftRow.owner_id);
+      // Research is not story-scoped — a draft has an owner but no story yet —
+      // so only the per-user cap applies here.
+      const budget = createBudgetGuard(null, draftRow.owner_id);
 
       await markJob(draftId, typedStage, { status: 'running' });
 
@@ -76,6 +80,7 @@ export const rerunResearchStage = inngest.createFunction(
         userPrompt: request.userPrompt,
         schema: request.schema,
         usage,
+        budget,
       });
 
       if (outcome.status === 'failed') {

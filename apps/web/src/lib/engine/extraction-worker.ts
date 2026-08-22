@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { callStructured, StructuredOutputError } from '@/lib/ai/gateway';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { applyDiffs, extractionResultSchema } from '@/lib/engine/diff';
 import { buildExtractorPrompt, EXTRACTOR_SYSTEM_PROMPT } from '@/lib/engine/extractor';
@@ -130,6 +131,7 @@ async function extractAndApply(chapterId: string, storyId: string): Promise<Extr
       {
         apiKey: serverEnv().OPENROUTER_API_KEY,
         usage: createUsageRecorder(storyId, null),
+        budget: createBudgetGuard(storyId, null),
       },
       {
         role: 'extractor',

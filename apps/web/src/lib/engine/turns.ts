@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { streamNarration } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import {
   assembleContext,
@@ -636,6 +637,7 @@ export async function generateTurn(
         {
           apiKey: serverEnv().OPENROUTER_API_KEY,
           usage: createUsageRecorder(turn.storyId, userId),
+          budget: createBudgetGuard(turn.storyId, userId),
         },
         {
           modelConfig: context.modelConfig,
@@ -837,6 +839,7 @@ async function evaluateTurnProposals(
       canonExceptions,
       modelConfig: context.modelConfig,
       usage: createUsageRecorder(storyId, userId),
+      budget: createBudgetGuard(storyId, userId),
     });
 
     const entityLabel = entity?.name ?? '(unclaimed entity)';
@@ -948,6 +951,7 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
           k: contextPolicy.retrievedChapters ?? 0,
           modelConfig,
           usage: createUsageRecorder(turn.storyId, null),
+          budget: createBudgetGuard(turn.storyId, null),
         })
       : [];
 

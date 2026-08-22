@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { allowAllBudget } from '@/lib/ai/budget.test-helpers';
 
 /**
  * End-to-end proof of Phase 6's exit criterion (build plan Part 10): "A
@@ -155,6 +156,7 @@ describe('Phase 6 exit criterion: a player proposing an unearned power gets a re
       canonExceptions: [],
       modelConfig: null,
       usage: nullUsage,
+      budget: allowAllBudget,
     });
 
     // 2. The Gatekeeper gives a reasoned in-universe rejection — this is the
@@ -203,6 +205,7 @@ describe('Phase 6 exit criterion: a player proposing an unearned power gets a re
       canonExceptions,
       modelConfig: null,
       usage: nullUsage,
+      budget: allowAllBudget,
     });
 
     expect(secondSuppressed).toBe(true);

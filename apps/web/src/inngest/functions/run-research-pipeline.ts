@@ -3,6 +3,8 @@ import 'server-only';
 import type { GetStepTools } from 'inngest';
 
 import { inngest } from '@/inngest/client';
+import type { BudgetGuard, UsageRecorder } from '@/lib/ai/gateway';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { applyStageOutput, type DraftDocument } from '@/lib/research/draft';
 import { buildGapsReport } from '@/lib/research/gaps';
@@ -78,7 +80,10 @@ async function executeStage(
   stage: Exclude<ResearchStage, 'gaps'>,
   input: DraftInput,
   draft: DraftDocument,
-  usage: ReturnType<typeof createUsageRecorder>,
+  // Bundled rather than two positional parameters: the pair travels together
+  // through eight call sites, and an argument order that can be swapped is an
+  // argument order that eventually is.
+  spend: { usage: UsageRecorder; budget: BudgetGuard },
 ) {
   await markJob(draftId, stage, { status: 'running' });
 
@@ -88,7 +93,8 @@ async function executeStage(
     systemPrompt: request.systemPrompt,
     userPrompt: request.userPrompt,
     schema: request.schema,
-    usage,
+    usage: spend.usage,
+    budget: spend.budget,
   });
 
   await markJob(
@@ -125,17 +131,22 @@ export const runResearchPipeline = inngest.createFunction(
     }
 
     const input = draftRow.input as unknown as DraftInput;
-    const usage = createUsageRecorder(null, draftRow.owner_id);
+    // Research is not story-scoped — a draft has an owner but no story yet —
+    // so only the per-user cap applies here.
+    const spend = {
+      usage: createUsageRecorder(null, draftRow.owner_id),
+      budget: createBudgetGuard(null, draftRow.owner_id),
+    };
 
     let draft: DraftDocument = { auMarks: [] };
 
-    const scopingOutcome = await step.run('stage-scoping', () => executeStage(draftId, 'scoping', input, draft, usage));
+    const scopingOutcome = await step.run('stage-scoping', () => executeStage(draftId, 'scoping', input, draft, spend));
     if (scopingOutcome.status === 'complete') {
       draft = applyStageOutput(draft, 'scoping', scopingOutcome.output);
       await persistDraft(draftId, draft);
     }
 
-    const rulesOutcome = await step.run('stage-rules-mechanics', () => executeStage(draftId, 'rules_mechanics', input, draft, usage));
+    const rulesOutcome = await step.run('stage-rules-mechanics', () => executeStage(draftId, 'rules_mechanics', input, draft, spend));
     if (rulesOutcome.status === 'complete') {
       draft = applyStageOutput(draft, 'rules_mechanics', rulesOutcome.output);
       await persistDraft(draftId, draft);
@@ -152,34 +163,34 @@ export const runResearchPipeline = inngest.createFunction(
         await markJob(draftId, 'progression', { status: 'skipped', output: null });
         return { status: 'skipped' as const };
       }
-      return executeStage(draftId, 'progression', input, draft, usage);
+      return executeStage(draftId, 'progression', input, draft, spend);
     });
     if (progressionOutcome.status === 'complete') {
       draft = applyStageOutput(draft, 'progression', progressionOutcome.output);
       await persistDraft(draftId, draft);
     }
 
-    const entitiesOutcome = await step.run('stage-entities', () => executeStage(draftId, 'entities', input, draft, usage));
+    const entitiesOutcome = await step.run('stage-entities', () => executeStage(draftId, 'entities', input, draft, spend));
     if (entitiesOutcome.status === 'complete') {
       draft = applyStageOutput(draft, 'entities', entitiesOutcome.output);
       await persistDraft(draftId, draft);
     }
 
-    const timelineOutcome = await step.run('stage-timeline', () => executeStage(draftId, 'timeline', input, draft, usage));
+    const timelineOutcome = await step.run('stage-timeline', () => executeStage(draftId, 'timeline', input, draft, spend));
     if (timelineOutcome.status === 'complete') {
       draft = applyStageOutput(draft, 'timeline', timelineOutcome.output);
       await persistDraft(draftId, draft);
     }
 
     const schemaDerivationOutcome = await step.run('stage-schema-derivation', () =>
-      executeStage(draftId, 'schema_derivation', input, draft, usage),
+      executeStage(draftId, 'schema_derivation', input, draft, spend),
     );
     if (schemaDerivationOutcome.status === 'complete') {
       draft = applyStageOutput(draft, 'schema_derivation', schemaDerivationOutcome.output);
       await persistDraft(draftId, draft);
     }
 
-    const rulePackOutcome = await step.run('stage-rule-pack', () => executeStage(draftId, 'rule_pack', input, draft, usage));
+    const rulePackOutcome = await step.run('stage-rule-pack', () => executeStage(draftId, 'rule_pack', input, draft, spend));
     if (rulePackOutcome.status === 'complete') {
       draft = applyStageOutput(draft, 'rule_pack', rulePackOutcome.output);
       await persistDraft(draftId, draft);

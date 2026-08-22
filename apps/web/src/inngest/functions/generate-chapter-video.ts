@@ -4,6 +4,7 @@ import type { GetStepTools } from 'inngest';
 
 import { inngest } from '@/inngest/client';
 import { generateVideo } from '@/lib/ai/media-gateway';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { serverEnv } from '@/lib/env';
 import { createServiceRoleClient } from '@/lib/supabase/server';
@@ -93,6 +94,7 @@ export const generateChapterVideo = inngest.createFunction(
             videoProviderApiKey: serverEnv().VIDEO_PROVIDER_API_KEY ?? '',
             ...(baseUrl !== undefined ? { videoProviderBaseUrl: baseUrl } : {}),
             usage: createUsageRecorder(row.story_id, null),
+            budget: createBudgetGuard(row.story_id, null),
           },
           {
             modelConfig: storyResult.data.model_config as never,

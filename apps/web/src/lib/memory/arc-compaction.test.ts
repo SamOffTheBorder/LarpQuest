@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { shouldCompactArc, ARC_COMPACTION_THRESHOLD_CHAPTERS, ARC_SIZE_CHAPTERS } from '@/lib/memory/arc-compaction';
+import { allowAllBudget } from '@/lib/ai/budget.test-helpers';
 
 /**
  * `shouldCompactArc` is a pure function of the chapter count — no database
@@ -120,6 +121,7 @@ describe('generateArcSummary', () => {
       modelConfig: null,
       retrievalBias: 'precedent',
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(outcome.status).toBe('complete');
@@ -146,6 +148,7 @@ describe('generateArcSummary', () => {
       modelConfig: null,
       retrievalBias: 'precedent',
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(outcome).toEqual({ status: 'failed', error: 'transport failure' });

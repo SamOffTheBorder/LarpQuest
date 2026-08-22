@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { allowAllBudget } from '@/lib/ai/budget.test-helpers';
 
 /**
  * End-to-end proof of Phase 4's exit criterion (build plan Part 10): "A
@@ -104,6 +105,7 @@ describe('Phase 4 exit criterion: continuity on a chapter-3 detail at chapter 30
       modelConfig: null,
       retrievalBias: 'precedent',
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     const chapter15Memory = await generateChapterMemory({
@@ -115,6 +117,7 @@ describe('Phase 4 exit criterion: continuity on a chapter-3 detail at chapter 30
       modelConfig: null,
       retrievalBias: 'precedent',
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(chapter3Memory.status).toBe('complete');
@@ -138,6 +141,7 @@ describe('Phase 4 exit criterion: continuity on a chapter-3 detail at chapter 30
       k: 5,
       modelConfig: null,
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(retrieved[0]?.summary).toContain('Ashfall Key');

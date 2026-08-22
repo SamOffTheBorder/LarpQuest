@@ -1,7 +1,8 @@
 import 'server-only';
 
-import { callStructured, StructuredOutputError, type UsageRecorder } from '@/lib/ai/gateway';
+import { callStructured, StructuredOutputError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { moderationResultSchema, type ModerationResult } from '@/lib/moderation/schemas';
 import { serverEnv } from '@/lib/env';
@@ -51,6 +52,7 @@ export async function moderateTurnSubmissions(
   modelConfig: ModelConfig | null,
   storyId: string,
   usage: UsageRecorder = createUsageRecorder(storyId, null),
+  budget: BudgetGuard = createBudgetGuard(storyId, null),
 ): Promise<ModerationOutcome> {
   const supabase = createServiceRoleClient();
   const { data: submissions, error } = await supabase
@@ -76,7 +78,7 @@ export async function moderateTurnSubmissions(
 
   try {
     const result = await callStructured(
-      { apiKey: serverEnv().OPENROUTER_API_KEY, usage },
+      { apiKey: serverEnv().OPENROUTER_API_KEY, usage, budget },
       {
         role: 'moderator',
         modelConfig,

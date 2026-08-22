@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { allowAllBudget } from '@/lib/ai/budget.test-helpers';
 
 /**
  * The invariant under test: `generateChapterMemory` never throws — a failure
@@ -80,6 +81,7 @@ function baseArgs(usage: ReturnType<typeof recorder>) {
     modelConfig: null,
     retrievalBias: 'precedent' as const,
     usage,
+    budget: allowAllBudget,
   };
 }
 

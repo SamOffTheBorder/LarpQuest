@@ -2,7 +2,8 @@ import 'server-only';
 
 import { z } from 'zod';
 
-import { callStructured, StructuredOutputError, type UsageRecorder } from '@/lib/ai/gateway';
+import { callStructured, StructuredOutputError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
+import { nullBudgetGuard } from '@/lib/ai/spend';
 import { nullUsageRecorder } from '@/lib/ai/usage';
 import { entitySchemaSchema, type EntitySchema } from '@/lib/engine/schema';
 import { resolveProgressionModel } from '@/lib/engine/progression-models';
@@ -121,12 +122,13 @@ const CANON_RULES_ONLY_SYSTEM_PROMPT = [
 async function compressCanonBible(
   canonBible: Record<string, unknown> | undefined,
   usage: UsageRecorder,
+  budget: BudgetGuard,
 ): Promise<{ summary: Record<string, unknown> | null; rulesOnly: Record<string, unknown> | null }> {
   if (canonBible === undefined) {
     return { summary: null, rulesOnly: null };
   }
 
-  const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage };
+  const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage, budget };
   const canonText = JSON.stringify(canonBible, null, 2);
 
   const [summaryResult, rulesOnlyResult] = await Promise.all([
@@ -205,12 +207,13 @@ export async function createUniverse(
   ownerId: string,
   input: UniverseVersionInput,
   usage: UsageRecorder = nullUsageRecorder,
+  budget: BudgetGuard = nullBudgetGuard,
 ): Promise<UniverseVersion> {
   const parsed = universeVersionInputSchema.parse(input);
   resolveProgressionModel(parsed.progressionModel);
 
   const contextPolicy = parsed.contextPolicy ?? DEFAULT_CONTEXT_POLICY;
-  const { summary, rulesOnly } = await compressCanonBible(parsed.canonBible, usage);
+  const { summary, rulesOnly } = await compressCanonBible(parsed.canonBible, usage, budget);
 
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase.rpc('create_universe_with_version', {
@@ -241,12 +244,13 @@ export async function publishUniverseVersion(
   ownerId: string,
   input: UniverseVersionInput,
   usage: UsageRecorder = nullUsageRecorder,
+  budget: BudgetGuard = nullBudgetGuard,
 ): Promise<UniverseVersion> {
   const parsed = universeVersionInputSchema.parse(input);
   resolveProgressionModel(parsed.progressionModel);
 
   const contextPolicy = parsed.contextPolicy ?? DEFAULT_CONTEXT_POLICY;
-  const { summary, rulesOnly } = await compressCanonBible(parsed.canonBible, usage);
+  const { summary, rulesOnly } = await compressCanonBible(parsed.canonBible, usage, budget);
 
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase.rpc('publish_universe_version', {

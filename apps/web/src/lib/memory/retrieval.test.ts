@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { allowAllBudget } from '@/lib/ai/budget.test-helpers';
 
 /**
  * Top-K similarity retrieval against a fake database. The invariant under
@@ -62,6 +63,7 @@ describe('retrieveRelevantSummaries', () => {
       k: 5,
       modelConfig: null,
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(result.map((r) => r.summary)).toEqual(['arc 1-12', 'chapter 5']);
@@ -81,6 +83,7 @@ describe('retrieveRelevantSummaries', () => {
       k: 2,
       modelConfig: null,
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(result).toHaveLength(2);
@@ -97,6 +100,7 @@ describe('retrieveRelevantSummaries', () => {
       k: 5,
       modelConfig: null,
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(result).toEqual([]);
@@ -113,6 +117,7 @@ describe('retrieveRelevantSummaries', () => {
       k: 5,
       modelConfig: null,
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(state.calledWithStoryId.every((id) => id === 'story-42')).toBe(true);
@@ -127,6 +132,7 @@ describe('retrieveRelevantSummaries', () => {
       k: 0,
       modelConfig: null,
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(result).toEqual([]);
@@ -143,6 +149,7 @@ describe('retrieveRelevantSummaries', () => {
       k: 5,
       modelConfig: null,
       usage: recorder(),
+      budget: allowAllBudget,
     });
 
     expect(result[0]?.arcRange).toEqual({ fromChapter: 50, toChapter: 61 });

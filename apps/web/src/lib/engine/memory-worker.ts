@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { shouldCompactArc, generateArcSummary } from '@/lib/memory/arc-compaction';
 import { generateChapterMemory, persistChapterMemory } from '@/lib/memory/generate';
@@ -114,6 +115,7 @@ async function generateAndCompact(chapterId: string, storyId: string): Promise<G
     modelConfig: storyResult.data.model_config as never,
     retrievalBias,
     usage: createUsageRecorder(storyId, null),
+    budget: createBudgetGuard(storyId, null),
   });
 
   await persistChapterMemory(chapterId, memoryOutcome);
@@ -152,6 +154,7 @@ async function generateAndCompact(chapterId: string, storyId: string): Promise<G
     modelConfig: storyResult.data.model_config as never,
     retrievalBias,
     usage: createUsageRecorder(storyId, null),
+    budget: createBudgetGuard(storyId, null),
   });
 
   // Arc-summary failure never turns the chapter's own memory job into a

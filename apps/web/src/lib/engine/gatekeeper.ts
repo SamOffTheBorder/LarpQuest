@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { callStructured, StructuredOutputError, type UsageRecorder } from '@/lib/ai/gateway';
+import { callStructured, StructuredOutputError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import { gatekeeperVerdictSchema, type GatekeeperVerdict } from '@/lib/ai/gatekeeper-schema';
 import type { ModelConfig } from '@/lib/ai/roles';
 import { isSuppressed } from '@/lib/engine/rules/exceptions';
@@ -74,6 +74,7 @@ export interface EvaluateProposalArgs {
   canonExceptions: CanonException[];
   modelConfig: ModelConfig | null | undefined;
   usage: UsageRecorder;
+  budget: BudgetGuard;
 }
 
 export interface ProposalRuling {
@@ -118,7 +119,7 @@ async function runGatekeeperCall(args: EvaluateProposalArgs): Promise<Gatekeeper
 
   try {
     const { data } = await callStructured(
-      { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage },
+      { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget },
       {
         role: 'gatekeeper',
         modelConfig: args.modelConfig,

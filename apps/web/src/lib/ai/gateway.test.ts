@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { callStructured, streamNarration, StructuredOutputError, type UsageRecorder } from './gateway';
+import { callStructured, embedText, streamNarration, StructuredOutputError, type UsageRecorder } from './gateway';
+import { SpendCapExceededError } from '@/lib/ai/budget';
+import { allowAllBudget, denyingBudget } from '@/lib/ai/budget.test-helpers';
 
 function recorder(): UsageRecorder & { calls: Parameters<UsageRecorder['record']>[0][] } {
   const calls: Parameters<UsageRecorder['record']>[0][] = [];
@@ -36,7 +38,7 @@ describe('callStructured', () => {
     const usage = recorder();
 
     const result = await callStructured(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       {
         role: 'extractor',
         modelConfig: { extractor: 'custom/extractor-model' },
@@ -70,7 +72,7 @@ describe('callStructured', () => {
     const usage = recorder();
 
     const result = await callStructured(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       {
         role: 'extractor',
         modelConfig: {},
@@ -95,7 +97,7 @@ describe('callStructured', () => {
     const usage = recorder();
 
     const result = await callStructured(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       {
         role: 'extractor',
         modelConfig: {},
@@ -131,7 +133,7 @@ describe('callStructured', () => {
 
     await expect(
       callStructured(
-        { apiKey: 'k', fetchImpl, usage },
+        { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
         {
           role: 'extractor',
           modelConfig: {},
@@ -160,7 +162,7 @@ describe('callStructured', () => {
     const usage = recorder();
 
     const result = await callStructured(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       {
         role: 'extractor',
         modelConfig: {},
@@ -181,7 +183,7 @@ describe('callStructured', () => {
     const usage = recorder();
 
     const result = await callStructured(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       {
         role: 'validator',
         modelConfig: {},
@@ -201,7 +203,7 @@ describe('callStructured', () => {
 
     await expect(
       callStructured(
-        { apiKey: 'k', fetchImpl, usage },
+        { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
         {
           role: 'extractor',
           modelConfig: {},
@@ -226,7 +228,7 @@ describe('callStructured', () => {
     const modelConfig = { narrator: 'model/a', extractor: 'model/b' };
 
     await callStructured(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       { role: 'extractor', modelConfig, systemPrompt: 's', userPrompt: 'u', schema: diffSchema, storyId: null },
     );
 
@@ -261,7 +263,7 @@ describe('streamNarration', () => {
     const chunks: string[] = [];
 
     const result = await streamNarration(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       {
         modelConfig: {},
         systemPrompt: 'sys',
@@ -289,7 +291,7 @@ describe('streamNarration', () => {
     const usage = recorder();
 
     const result = await streamNarration(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       { modelConfig: {}, systemPrompt: 'sys', userPrompt: 'user', onChunk: () => {} },
     );
 
@@ -304,7 +306,7 @@ describe('streamNarration', () => {
     const usage = recorder();
 
     await streamNarration(
-      { apiKey: 'k', fetchImpl, usage },
+      { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
       {
         modelConfig: { narrator: 'custom/narrator', extractor: 'custom/extractor' },
         systemPrompt: 'sys',
@@ -326,11 +328,73 @@ describe('streamNarration', () => {
 
     await expect(
       streamNarration(
-        { apiKey: 'k', fetchImpl, usage },
+        { apiKey: 'k', fetchImpl, usage, budget: allowAllBudget },
         { modelConfig: {}, systemPrompt: 'sys', userPrompt: 'user', onChunk: () => {} },
       ),
     ).rejects.toThrow(/500/);
 
     expect(usage.calls[0]?.succeeded).toBe(false);
+  });
+});
+
+/**
+ * The hard stop's whole value is that it cannot be bypassed by a call site, so
+ * what is asserted here is that no HTTP request goes out at all — not merely
+ * that an error surfaced.
+ */
+describe('spend cap enforcement', () => {
+  const capError = new SpendCapExceededError('story', 30, 25);
+
+  it('refuses a structured call before contacting the provider', async () => {
+    const fetchImpl = vi.fn();
+    const usage = recorder();
+
+    await expect(
+      callStructured(
+        { apiKey: 'k', fetchImpl, usage, budget: denyingBudget(capError) },
+        {
+          role: 'extractor',
+          modelConfig: {},
+          systemPrompt: 's',
+          userPrompt: 'u',
+          schema: diffSchema,
+          storyId: 'story-1',
+        },
+      ),
+    ).rejects.toThrow(SpendCapExceededError);
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    // No tokens were billed, so there is nothing to log.
+    expect(usage.calls).toHaveLength(0);
+  });
+
+  it('refuses narration before contacting the provider', async () => {
+    const fetchImpl = vi.fn();
+    const usage = recorder();
+
+    await expect(
+      streamNarration(
+        { apiKey: 'k', fetchImpl, usage, budget: denyingBudget(capError) },
+        { modelConfig: {}, systemPrompt: 's', userPrompt: 'u', onChunk: () => {} },
+      ),
+    ).rejects.toThrow(SpendCapExceededError);
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(usage.calls).toHaveLength(0);
+  });
+
+  it('refuses embedding before contacting the provider', async () => {
+    const fetchImpl = vi.fn();
+    const usage = recorder();
+
+    await expect(
+      embedText(
+        { apiKey: 'k', fetchImpl, usage, budget: denyingBudget(capError) },
+        { modelConfig: {}, text: 'hello', storyId: 'story-1' },
+      ),
+    ).rejects.toThrow(SpendCapExceededError);
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(usage.calls).toHaveLength(0);
   });
 });

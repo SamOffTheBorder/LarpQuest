@@ -23,6 +23,7 @@ const sidebars: SidebarsConfig = {
         'architecture/media-generation',
         'architecture/search-export-sharing',
         'architecture/scheduling',
+        'architecture/spend-caps',
       ],
     },
     {

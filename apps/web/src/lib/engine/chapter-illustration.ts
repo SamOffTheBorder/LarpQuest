@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { generateImage } from '@/lib/ai/media-gateway';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { requireRole } from '@/lib/engine/membership';
 import { serverEnv } from '@/lib/env';
@@ -211,6 +212,7 @@ export async function generateChapterImage(chapterImageId: string): Promise<Chap
         openRouterApiKey: serverEnv().OPENROUTER_API_KEY,
         videoProviderApiKey: '',
         usage: createUsageRecorder(row.story_id, null),
+        budget: createBudgetGuard(row.story_id, null),
       },
       { modelConfig: storyResult.data.model_config as never, prompt: row.prompt ?? '', storyId: row.story_id },
     );

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { callStructured, embedText, StructuredOutputError, EmbeddingError, type UsageRecorder } from '@/lib/ai/gateway';
+import { callStructured, embedText, StructuredOutputError, EmbeddingError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
 import { buildChapterSummaryPrompt, CHAPTER_SUMMARY_SYSTEM_PROMPT, type SummaryEntityInput } from '@/lib/memory/prompts';
 import { chapterSummarySchema, type RetrievalBias } from '@/lib/memory/schemas';
@@ -39,6 +39,7 @@ export interface GenerateChapterMemoryArgs {
   modelConfig: ModelConfig | null | undefined;
   retrievalBias: RetrievalBias;
   usage: UsageRecorder;
+  budget: BudgetGuard;
 }
 
 function formatSummaryText(summary: {
@@ -56,7 +57,7 @@ function formatSummaryText(summary: {
 }
 
 export async function generateChapterMemory(args: GenerateChapterMemoryArgs): Promise<MemoryOutcome> {
-  const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage };
+  const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget };
 
   let summaryText: string;
   try {

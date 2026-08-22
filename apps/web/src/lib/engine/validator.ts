@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { ModelConfig } from '@/lib/ai/roles';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { runValidatorCall, ValidatorOutputError } from '@/lib/ai/validator-call';
 import { applicableRules, evaluateRules } from '@/lib/engine/rule-engine';
@@ -63,6 +64,7 @@ export async function runValidation(args: RunValidationArgs): Promise<Validation
     modelConfig: args.modelConfig,
     storyId: args.storyId,
     usage: createUsageRecorder(args.storyId, args.userId),
+    budget: createBudgetGuard(args.storyId, args.userId),
   });
 
   const flags = evaluateRules({ rules, violations, canonExceptions: args.canonExceptions });

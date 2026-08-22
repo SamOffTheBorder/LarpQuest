@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { streamNarration } from '@/lib/ai/gateway';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { nullUsageRecorder } from '@/lib/ai/usage';
 import { assertMember } from '@/lib/engine/membership';
 import { resolveTurnMode } from '@/lib/engine/turn-modes';
@@ -106,7 +107,11 @@ export async function generateBaseline(
   const result = await streamNarration(
     {
       apiKey: serverEnv().OPENROUTER_API_KEY,
+      // Deliberately unlogged (this comparison should not distort the story's
+      // cost stats) but still capped: it is a real, user-triggerable call
+      // against the same budget.
       usage: nullUsageRecorder,
+      budget: createBudgetGuard(storyId, userId),
     },
     {
       modelConfig: storyResult.data.model_config as never,

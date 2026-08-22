@@ -2,7 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 
-import { callStructured, StructuredOutputError, type UsageRecorder } from '@/lib/ai/gateway';
+import { callStructured, StructuredOutputError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
 import type { Rule } from '@/lib/engine/rules/types';
 import { serverEnv } from '@/lib/env';
@@ -82,6 +82,7 @@ export interface RunValidatorCallArgs {
   modelConfig: ModelConfig | null | undefined;
   storyId: string;
   usage: UsageRecorder;
+  budget: BudgetGuard;
 }
 
 /**
@@ -96,7 +97,7 @@ export async function runValidatorCall(args: RunValidatorCallArgs): Promise<Vali
 
   try {
     const { data } = await callStructured(
-      { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage },
+      { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget },
       {
         role: 'validator',
         modelConfig: args.modelConfig,

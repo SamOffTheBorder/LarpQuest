@@ -793,6 +793,7 @@ export type Database = {
           id: string
           model_config: Json
           owner_id: string
+          spend_cap_usd: number | null
           status: string
           title: string
           turn_config: Json
@@ -809,6 +810,7 @@ export type Database = {
           id?: string
           model_config?: Json
           owner_id: string
+          spend_cap_usd?: number | null
           status?: string
           title: string
           turn_config?: Json
@@ -825,6 +827,7 @@ export type Database = {
           id?: string
           model_config?: Json
           owner_id?: string
+          spend_cap_usd?: number | null
           status?: string
           title?: string
           turn_config?: Json
@@ -1317,6 +1320,7 @@ export type Database = {
           accent_hue: number
           created_at: string
           font_pairing: string
+          spend_cap_usd: number | null
           text_scale: number
           theme_preset: string
           updated_at: string
@@ -1326,6 +1330,7 @@ export type Database = {
           accent_hue?: number
           created_at?: string
           font_pairing?: string
+          spend_cap_usd?: number | null
           text_scale?: number
           theme_preset?: string
           updated_at?: string
@@ -1335,6 +1340,7 @@ export type Database = {
           accent_hue?: number
           created_at?: string
           font_pairing?: string
+          spend_cap_usd?: number | null
           text_scale?: number
           theme_preset?: string
           updated_at?: string
@@ -1688,6 +1694,13 @@ export type Database = {
           entity_id: string
           field: string
           outcome: string
+        }[]
+      }
+      spend_to_date: {
+        Args: { target_story_id: string | null; target_user_id: string | null }
+        Returns: {
+          story_spend_usd: number
+          user_spend_usd: number
         }[]
       }
       search_story: {

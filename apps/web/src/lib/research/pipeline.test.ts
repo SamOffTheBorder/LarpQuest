@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { applyStageOutput, type DraftDocument } from '@/lib/research/draft';
 import type { ScopingResult } from '@/lib/research/schemas';
+import { allowAllBudget } from '@/lib/ai/budget.test-helpers';
 
 /**
  * The invariant under test: a malformed stage response never throws past
@@ -74,6 +75,7 @@ describe('runStage', () => {
       userPrompt: 'user',
       schema: z.object({ ok: z.boolean() }),
       usage,
+      budget: allowAllBudget,
     });
 
     expect(outcome).toEqual({ status: 'complete', output: { ok: true } });
@@ -90,6 +92,7 @@ describe('runStage', () => {
       userPrompt: 'user',
       schema: z.object({ ok: z.boolean() }),
       usage,
+      budget: allowAllBudget,
     });
 
     expect(outcome.status).toBe('failed');
@@ -109,6 +112,7 @@ describe('runStage', () => {
       userPrompt: 'user',
       schema: z.object({ ok: z.boolean() }),
       usage,
+      budget: allowAllBudget,
     });
 
     expect(outcome).toEqual({ status: 'failed', error: 'transport failure' });

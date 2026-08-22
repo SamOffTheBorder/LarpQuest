@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { embedText, type UsageRecorder } from '@/lib/ai/gateway';
+import { embedText, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
 import { toVectorLiteral } from '@/lib/memory/generate';
 import { serverEnv } from '@/lib/env';
@@ -33,6 +33,7 @@ export interface RetrieveRelevantSummariesArgs {
   k: number;
   modelConfig: ModelConfig | null | undefined;
   usage: UsageRecorder;
+  budget: BudgetGuard;
 }
 
 export async function retrieveRelevantSummaries(
@@ -43,7 +44,7 @@ export async function retrieveRelevantSummaries(
   }
 
   const { embedding } = await embedText(
-    { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage },
+    { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget },
     { modelConfig: args.modelConfig, text: args.queryText, storyId: args.storyId },
   );
 

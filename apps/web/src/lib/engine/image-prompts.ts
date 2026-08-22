@@ -3,6 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 
 import { callStructured, StructuredOutputError } from '@/lib/ai/gateway';
+import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { queueChapterIllustration } from '@/lib/engine/chapter-illustration';
 import { serverEnv } from '@/lib/env';
@@ -180,6 +181,7 @@ async function generatePrompts(chapterId: string, storyId: string): Promise<stri
       {
         apiKey: serverEnv().OPENROUTER_API_KEY,
         usage: createUsageRecorder(storyId, null),
+        budget: createBudgetGuard(storyId, null),
       },
       {
         role: 'illustrator',

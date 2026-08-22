@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { generateImage, generateVideo, MediaGenerationError, type MediaGatewayDeps } from './media-gateway';
 import type { UsageRecorder } from './gateway';
+import { allowAllBudget } from '@/lib/ai/budget.test-helpers';
 
 function recorder(): UsageRecorder & { calls: Parameters<UsageRecorder['record']>[0][] } {
   const calls: Parameters<UsageRecorder['record']>[0][] = [];
@@ -32,6 +33,7 @@ function baseDeps(overrides: Partial<MediaGatewayDeps> = {}): MediaGatewayDeps {
     openRouterApiKey: 'or-key',
     videoProviderApiKey: 'video-key',
     usage: recorder(),
+    budget: allowAllBudget,
     ...overrides,
   };
 }
