@@ -192,18 +192,16 @@ export async function joinViaInvite(token: string): Promise<JoinResult> {
     throw new Error(`Failed to join story: ${error.message}`);
   }
 
-  // The RPC returns only the granted role; the story id is looked up
-  // separately (readable now that the caller is a member via the row the RPC
-  // just inserted) rather than widening the RPC's return shape.
-  const { data: invite, error: inviteError } = await supabase
-    .from('story_invites')
-    .select('story_id')
-    .eq('token', token)
-    .maybeSingle();
+  // The RPC returns both role and story_id directly (it's security definer,
+  // so it can read story_invites regardless of the caller's role) — a
+  // follow-up client-session query against story_invites would be blocked by
+  // story_invites_select for anyone joining as player/spectator, since that
+  // policy only allows owner/gm to read.
+  const row = (Array.isArray(data) ? data[0] : data) as { role: InviteRole; story_id: string } | undefined;
 
-  if (inviteError !== null || invite === null) {
-    throw new Error(`Joined successfully but failed to resolve the story: ${inviteError?.message ?? 'not found'}`);
+  if (row === undefined) {
+    throw new Error('Joined successfully but the story could not be resolved.');
   }
 
-  return { storyId: invite.story_id, role: data as InviteRole };
+  return { storyId: row.story_id, role: row.role };
 }

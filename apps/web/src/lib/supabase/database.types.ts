@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -1603,7 +1603,13 @@ export type Database = {
         Args: { roles: string[]; target_story_id: string }
         Returns: boolean
       }
-      join_story_via_invite: { Args: { p_token: string }; Returns: string }
+      join_story_via_invite: {
+        Args: { p_token: string }
+        Returns: {
+          role: string
+          story_id: string
+        }[]
+      }
       match_arc_summaries: {
         Args: {
           p_match_count?: number

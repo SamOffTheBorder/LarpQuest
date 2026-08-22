@@ -114,29 +114,7 @@ vi.mock('@/lib/supabase/server', () => {
           invite.use_count = (invite.use_count as number) + 1;
         }
 
-        return { data: invite.role, error: null };
-      },
-      from(table: string) {
-        let token: unknown;
-        const builder = {
-          select() {
-            return builder;
-          },
-          eq(column: string, value: unknown) {
-            if (column === 'token') {
-              token = value;
-            }
-            return builder;
-          },
-          async maybeSingle() {
-            if (table === 'story_invites') {
-              const invite = [...state.invites.values()].find((row) => row.token === token);
-              return { data: invite !== undefined ? { story_id: invite.story_id } : null, error: null };
-            }
-            return { data: null, error: null };
-          },
-        };
-        return builder;
+        return { data: [{ role: invite.role, story_id: invite.story_id }], error: null };
       },
     }),
   };
