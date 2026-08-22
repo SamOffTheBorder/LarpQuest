@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth';
 import { createInvite, inviteRoleSchema, joinViaInvite, revokeInvite } from '@/lib/engine/invites';
 import { removeMember } from '@/lib/engine/membership';
+import { transferStoryOwnership } from '@/lib/engine/ownership-transfer';
 
 export type MemberActionState = {
   status: 'idle' | 'error';
@@ -87,4 +88,17 @@ export async function joinStoryAction(
   } catch (error) {
     return { status: 'error', message: errorMessage(error) };
   }
+}
+
+export async function transferOwnershipAction(storyId: string, newOwnerId: string): Promise<MemberActionState> {
+  await requireUser();
+
+  try {
+    await transferStoryOwnership(storyId, newOwnerId);
+  } catch (error) {
+    return { status: 'error', message: errorMessage(error) };
+  }
+
+  revalidatePath(`/stories/${storyId}/members`);
+  return initialIdle;
 }

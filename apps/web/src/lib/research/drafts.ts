@@ -26,7 +26,8 @@ export class DraftNotFoundError extends Error {
 
 export interface UniverseDraft {
   id: string;
-  ownerId: string;
+  /** Null once the owning account has been deleted; the draft is preserved. */
+  ownerId: string | null;
   status: 'researching' | 'ready_for_review' | 'published';
   input: DraftInput;
   draft: DraftDocument;
@@ -38,7 +39,7 @@ export interface UniverseDraft {
 
 interface UniverseDraftRow {
   id: string;
-  owner_id: string;
+  owner_id: string | null;
   status: string;
   input: unknown;
   draft: unknown;

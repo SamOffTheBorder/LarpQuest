@@ -17,7 +17,8 @@ import { createClient } from '@/lib/supabase/server';
 export interface PublicUniverseSummary {
   id: string;
   name: string;
-  ownerId: string;
+  /** Null once the owning account has been deleted; the universe stays published. */
+  ownerId: string | null;
   forkedFrom: string | null;
   createdAt: string;
 }
@@ -25,7 +26,7 @@ export interface PublicUniverseSummary {
 interface UniverseRow {
   id: string;
   name: string;
-  owner_id: string;
+  owner_id: string | null;
   forked_from: string | null;
   created_at: string;
 }

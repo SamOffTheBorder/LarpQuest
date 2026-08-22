@@ -24,6 +24,7 @@ const sidebars: SidebarsConfig = {
         'architecture/search-export-sharing',
         'architecture/scheduling',
         'architecture/spend-caps',
+        'architecture/account-deletion',
       ],
     },
     {

@@ -2,7 +2,7 @@
 
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import Link from 'next/link';
-import { SettingsIcon, LogOutIcon, ChevronDownIcon, WalletIcon } from 'lucide-react';
+import { SettingsIcon, LogOutIcon, ChevronDownIcon, WalletIcon, UserIcon } from 'lucide-react';
 
 import { signOutAction } from '@/lib/auth-actions';
 import { cn } from '@/lib/utils';
@@ -35,6 +35,13 @@ export function UserMenu({ email }: { email: string }) {
             >
               <WalletIcon className="size-4" />
               Spending
+            </MenuPrimitive.Item>
+            <MenuPrimitive.Item
+              render={<Link href="/settings/account" />}
+              className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+            >
+              <UserIcon className="size-4" />
+              Account
             </MenuPrimitive.Item>
             <MenuPrimitive.Separator className="my-1 h-px bg-border" />
             <MenuPrimitive.Item

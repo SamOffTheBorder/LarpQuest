@@ -300,7 +300,12 @@ export type SubmissionInput = z.infer<typeof submissionInputSchema>;
 export interface Submission {
   id: string;
   turnId: string;
-  userId: string;
+  /**
+   * Null when the submitting account has since been deleted. The submission
+   * itself is preserved regardless (CLAUDE.md #4) — this only means it can no
+   * longer be attributed to a live account.
+   */
+  userId: string | null;
   entityId: string | null;
   content: string;
   proposal: string | null;
@@ -309,7 +314,7 @@ export interface Submission {
 interface SubmissionRow {
   id: string;
   turn_id: string;
-  user_id: string;
+  user_id: string | null;
   entity_id: string | null;
   content: string;
   proposals: unknown;

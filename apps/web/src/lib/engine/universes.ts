@@ -164,14 +164,15 @@ async function compressCanonBible(
 
 export interface Universe {
   id: string;
-  ownerId: string;
+  ownerId: string | null;
   name: string;
   createdAt: string;
 }
 
 interface UniverseRow {
   id: string;
-  owner_id: string;
+  /** Null once the owning account has been deleted; the universe is preserved. */
+  owner_id: string | null;
   name: string;
   created_at: string;
 }

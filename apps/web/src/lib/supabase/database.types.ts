@@ -792,7 +792,7 @@ export type Database = {
           current_turn: number
           id: string
           model_config: Json
-          owner_id: string
+          owner_id: string | null
           spend_cap_usd: number | null
           status: string
           title: string
@@ -809,7 +809,7 @@ export type Database = {
           current_turn?: number
           id?: string
           model_config?: Json
-          owner_id: string
+          owner_id?: string | null
           spend_cap_usd?: number | null
           status?: string
           title: string
@@ -826,7 +826,7 @@ export type Database = {
           current_turn?: number
           id?: string
           model_config?: Json
-          owner_id?: string
+          owner_id?: string | null
           spend_cap_usd?: number | null
           status?: string
           title?: string
@@ -991,7 +991,7 @@ export type Database = {
           submitted_at: string
           turn_id: string
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           content: string
@@ -1002,7 +1002,7 @@ export type Database = {
           submitted_at?: string
           turn_id: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           content?: string
@@ -1013,7 +1013,7 @@ export type Database = {
           submitted_at?: string
           turn_id?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -1139,7 +1139,7 @@ export type Database = {
           draft: Json
           id: string
           input: Json
-          owner_id: string
+          owner_id: string | null
           published_version: number | null
           status: string
           universe_id: string | null
@@ -1150,7 +1150,7 @@ export type Database = {
           draft?: Json
           id?: string
           input: Json
-          owner_id: string
+          owner_id?: string | null
           published_version?: number | null
           status?: string
           universe_id?: string | null
@@ -1161,7 +1161,7 @@ export type Database = {
           draft?: Json
           id?: string
           input?: Json
-          owner_id?: string
+          owner_id?: string | null
           published_version?: number | null
           status?: string
           universe_id?: string | null
@@ -1237,7 +1237,7 @@ export type Database = {
           id: string
           is_public: boolean
           name: string
-          owner_id: string
+          owner_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1245,7 +1245,7 @@ export type Database = {
           id?: string
           is_public?: boolean
           name: string
-          owner_id: string
+          owner_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1253,7 +1253,7 @@ export type Database = {
           id?: string
           is_public?: boolean
           name?: string
-          owner_id?: string
+          owner_id?: string | null
         }
         Relationships: [
           {
@@ -1509,7 +1509,7 @@ export type Database = {
           current_turn: number
           id: string
           model_config: Json
-          owner_id: string
+          owner_id: string | null
           spend_cap_usd: number | null
           status: string
           title: string
@@ -1735,6 +1735,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      transfer_story_ownership: {
+        Args: { p_new_owner_id: string; p_story_id: string }
+        Returns: undefined
+      }
       upgrade_story_universe_version: {
         Args: {
           p_owner_id: string
@@ -1748,7 +1752,7 @@ export type Database = {
           current_turn: number
           id: string
           model_config: Json
-          owner_id: string
+          owner_id: string | null
           spend_cap_usd: number | null
           status: string
           title: string
