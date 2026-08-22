@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { requireUser } from '@/lib/auth';
 import { createStoryInputSchema, createStory } from '@/lib/engine/stories';
+import { assertWithinRateLimit, RateLimitExceededError } from '@/lib/rate-limit';
 
 export type CreateStoryState = {
   status: 'idle' | 'error';
@@ -15,6 +16,15 @@ export async function createStoryAction(
   formData: FormData,
 ): Promise<CreateStoryState> {
   const user = await requireUser();
+
+  try {
+    await assertWithinRateLimit('story_create', user.id);
+  } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return { status: 'error', message: error.message };
+    }
+    throw error;
+  }
 
   const universeId = formData.get('universeId');
 

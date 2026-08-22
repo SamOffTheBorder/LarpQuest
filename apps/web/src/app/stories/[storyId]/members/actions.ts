@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireUser } from '@/lib/auth';
 import { createInvite, inviteRoleSchema, joinViaInvite, revokeInvite } from '@/lib/engine/invites';
+import { assertWithinRateLimit, RateLimitExceededError } from '@/lib/rate-limit';
 import { removeMember } from '@/lib/engine/membership';
 import { transferStoryOwnership } from '@/lib/engine/ownership-transfer';
 
@@ -31,6 +32,7 @@ export async function createInviteAction(
   }
 
   try {
+    await assertWithinRateLimit('invite_create', user.id);
     await createInvite(storyId, user.id, { role: parsedRole.data, expiresInDays: 7, maxUses: null });
   } catch (error) {
     return { status: 'error', message: errorMessage(error) };

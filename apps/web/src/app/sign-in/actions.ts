@@ -3,6 +3,8 @@
 import { z } from 'zod';
 
 import { clientEnv } from '@/lib/env';
+import { assertWithinRateLimit, RateLimitExceededError } from '@/lib/rate-limit';
+import { callerIp } from '@/lib/request-ip';
 import { createClient } from '@/lib/supabase/server';
 
 const emailSchema = z.string().trim().toLowerCase().pipe(z.email());
@@ -25,6 +27,15 @@ export async function signInAction(
 
   if (!parsed.success) {
     return { status: 'error', message: 'Enter a valid email address.' };
+  }
+
+  try {
+    await assertWithinRateLimit('sign_in', await callerIp());
+  } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return { status: 'error', message: error.message };
+    }
+    throw error;
   }
 
   const supabase = await createClient();

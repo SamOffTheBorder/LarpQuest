@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { requireUserForApi } from '@/lib/auth';
 import { generateTurn, lockTurn, retryTurn, TurnStateError } from '@/lib/engine/turns';
+import { assertWithinRateLimit, RateLimitExceededError } from '@/lib/rate-limit';
 
 /**
  * Streams generation progress as Server-Sent Events.
@@ -26,6 +27,18 @@ export async function POST(
 
   if (user === null) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    await assertWithinRateLimit('turn_generate', user.id);
+  } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429, headers: { 'Retry-After': String(error.retryAfterSeconds) } },
+      );
+    }
+    throw error;
   }
 
   const { turnId } = await params;

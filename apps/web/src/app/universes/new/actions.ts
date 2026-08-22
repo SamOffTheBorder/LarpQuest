@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 
 import { requireUser } from '@/lib/auth';
+import { assertWithinRateLimit, RateLimitExceededError } from '@/lib/rate-limit';
 import { createDraft } from '@/lib/research/drafts';
 import { draftInputSchema } from '@/lib/research/schemas';
 
@@ -16,6 +17,15 @@ export async function createDraftAction(
   formData: FormData,
 ): Promise<NewDraftState> {
   const user = await requireUser();
+
+  try {
+    await assertWithinRateLimit('universe_draft_create', user.id);
+  } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return { status: 'error', message: error.message };
+    }
+    throw error;
+  }
 
   const sourceText = formData.get('sourceText');
   const canonCutoff = formData.get('canonCutoff');

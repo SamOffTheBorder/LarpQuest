@@ -702,6 +702,27 @@ export type Database = {
           },
         ]
       }
+      rate_limit_counters: {
+        Row: {
+          action: string
+          count: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          action: string
+          count?: number
+          key: string
+          window_start: string
+        }
+        Update: {
+          action?: string
+          count?: number
+          key?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       research_jobs: {
         Row: {
           attempt_count: number
@@ -1380,6 +1401,19 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      check_rate_limit: {
+        Args: {
+          p_action: string
+          p_key: string
+          p_limit: number
+          p_window_seconds: number
+        }
+        Returns: {
+          allowed: boolean
+          current_count: number
+          retry_after_seconds: number
+        }[]
       }
       claim_extraction_job: {
         Args: { stale_after?: string }
