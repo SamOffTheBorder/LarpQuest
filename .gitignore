@@ -43,3 +43,6 @@ Thumbs.db
 # editor
 .idea/
 *.swp
+
+# personal, not part of the project
+/BlackCloverLarp/
