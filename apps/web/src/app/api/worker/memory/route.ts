@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { runOneMemoryJob } from '@/lib/engine/memory-worker';
-import { serverEnv } from '@/lib/env';
+import { isAuthorizedWorkerRequest } from '@/lib/worker/auth';
 
 /**
  * Memory worker entry point. Mirrors `api/worker/extract/route.ts` exactly:
@@ -10,11 +10,8 @@ import { serverEnv } from '@/lib/env';
  * recorded on the queue row and the chapter — so this always returns 200,
  * never surfacing the job failure as an HTTP error.
  */
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const expected = `Bearer ${serverEnv().WORKER_SECRET}`;
-
-  if (authHeader !== expected) {
+async function handle(request: Request) {
+  if (!isAuthorizedWorkerRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -26,3 +23,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ claimed: true, error: message }, { status: 200 });
   }
 }
+
+export { handle as GET, handle as POST };

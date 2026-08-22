@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { runOneExtraction } from '@/lib/engine/extraction-worker';
-import { serverEnv } from '@/lib/env';
+import { isAuthorizedWorkerRequest } from '@/lib/worker/auth';
 
 /**
  * Extraction worker entry point.
@@ -12,13 +12,14 @@ import { serverEnv } from '@/lib/env';
  * rather than one request running an unbounded loop.
  *
  * Auth is a static shared secret rather than requireUser() — there is no user
- * session in a cron invocation.
+ * session in a cron invocation. See `lib/worker/auth.ts` for which secrets are
+ * accepted and why there are two.
+ *
+ * Both GET and POST are exported and identical: Vercel Cron issues GET and
+ * cannot be configured to POST, while external schedulers generally POST.
  */
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const expected = `Bearer ${serverEnv().WORKER_SECRET}`;
-
-  if (authHeader !== expected) {
+async function handle(request: Request) {
+  if (!isAuthorizedWorkerRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -33,3 +34,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ claimed: true, error: message }, { status: 200 });
   }
 }
+
+export { handle as GET, handle as POST };

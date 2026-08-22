@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { sweepDeadlines } from '@/lib/engine/deadlines';
-import { serverEnv } from '@/lib/env';
+import { isAuthorizedWorkerRequest } from '@/lib/worker/auth';
 
 /**
  * Deadline sweep entry point.
@@ -11,11 +11,8 @@ import { serverEnv } from '@/lib/env';
  * turn across every story, since (unlike extraction/memory) there is no
  * single-row queue to drain incrementally here.
  */
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const expected = `Bearer ${serverEnv().WORKER_SECRET}`;
-
-  if (authHeader !== expected) {
+async function handle(request: Request) {
+  if (!isAuthorizedWorkerRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -29,3 +26,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ checked: 0, locked: 0, blocked: 0, error: message }, { status: 200 });
   }
 }
+
+export { handle as GET, handle as POST };

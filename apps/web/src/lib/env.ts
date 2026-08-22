@@ -39,8 +39,15 @@ const serverSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   OPENROUTER_API_KEY: z.string().min(1),
   ENCRYPTION_MASTER_KEY: base64Key,
-  /** Bearer token required to trigger the extraction worker route. */
+  /** Bearer token required to trigger the scheduled worker routes. */
   WORKER_SECRET: z.string().min(16, 'must be at least 16 characters'),
+  /**
+   * Vercel Cron's own bearer token. Optional: only deployments scheduled by
+   * Vercel Cron set it, since Vercel injects this fixed name and offers no way
+   * to rename it to WORKER_SECRET. Deployments driven by any other scheduler
+   * leave it unset and authenticate with WORKER_SECRET alone.
+   */
+  CRON_SECRET: z.string().min(16, 'must be at least 16 characters').optional(),
   /**
    * Inngest deploy keys. Optional: absent in local dev, where the Inngest SDK
    * auto-discovers the local Dev Server (`npm run dev:inngest`) without them.

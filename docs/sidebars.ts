@@ -22,6 +22,7 @@ const sidebars: SidebarsConfig = {
         'architecture/turn-modes',
         'architecture/media-generation',
         'architecture/search-export-sharing',
+        'architecture/scheduling',
       ],
     },
     {
