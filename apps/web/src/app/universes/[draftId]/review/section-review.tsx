@@ -48,9 +48,9 @@ function isFactShaped(value: unknown): value is { value: unknown; confidence: st
   );
 }
 
-const CONFIDENCE_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = {
-  high: 'default',
-  medium: 'secondary',
+const CONFIDENCE_VARIANT: Record<string, 'success' | 'warning' | 'destructive'> = {
+  high: 'success',
+  medium: 'warning',
   low: 'destructive',
 };
 

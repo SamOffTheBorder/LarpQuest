@@ -75,7 +75,7 @@ export default async function BaselineComparisonPage({
           <CardHeader>
             <CardTitle className="text-base">Real chapter (state-assembled)</CardTitle>
           </CardHeader>
-          <CardContent className="whitespace-pre-wrap text-sm leading-relaxed">
+          <CardContent className="whitespace-pre-wrap font-serif text-sm leading-relaxed">
             {comparison.realProse}
           </CardContent>
         </Card>
@@ -84,7 +84,7 @@ export default async function BaselineComparisonPage({
           <CardHeader>
             <CardTitle className="text-base">Baseline (prose-only, no state)</CardTitle>
           </CardHeader>
-          <CardContent className="whitespace-pre-wrap text-sm leading-relaxed">
+          <CardContent className="whitespace-pre-wrap font-serif text-sm leading-relaxed">
             {comparison.baselineProse}
           </CardContent>
         </Card>

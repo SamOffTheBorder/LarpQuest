@@ -96,9 +96,17 @@ export function useTurnPresence(
     initialSubmittedEntityIds,
   );
 
+  // initialSubmittedEntityIds is recomputed (new array reference) on every
+  // render of the caller, so it can't be a dependency directly — that would
+  // re-run this effect, call setState, and re-render in an infinite loop.
+  // Depend on its serialized contents instead, which is stable across
+  // renders where the actual submitted ids haven't changed.
+  const initialSubmittedEntityIdsKey = initialSubmittedEntityIds.join(',');
+
   useEffect(() => {
     setSubmittedEntityIds(initialSubmittedEntityIds);
-  }, [initialSubmittedEntityIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSubmittedEntityIdsKey]);
 
   useEffect(() => {
     if (turnId === null) {

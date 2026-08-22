@@ -123,7 +123,7 @@ export default async function StoryPage({
                   <RollbackButton storyId={storyId} chapterId={chapter.id} />
                 )}
               </CardHeader>
-              <CardContent className="whitespace-pre-wrap text-sm leading-relaxed">
+              <CardContent className="whitespace-pre-wrap font-serif text-sm leading-relaxed">
                 {chapter.prose}
               </CardContent>
               <CardFooter className="flex-col items-start gap-2">

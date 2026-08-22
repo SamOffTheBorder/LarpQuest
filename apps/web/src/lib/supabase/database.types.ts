@@ -1312,6 +1312,36 @@ export type Database = {
           },
         ]
       }
+      user_preferences: {
+        Row: {
+          accent_hue: number
+          created_at: string
+          font_pairing: string
+          text_scale: number
+          theme_preset: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accent_hue?: number
+          created_at?: string
+          font_pairing?: string
+          text_scale?: number
+          theme_preset?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accent_hue?: number
+          created_at?: string
+          font_pairing?: string
+          text_scale?: number
+          theme_preset?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1456,71 +1486,39 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      create_story:
-        | {
-            Args: {
-              p_content_rating: string
-              p_model_config: Json
-              p_owner_id: string
-              p_title: string
-              p_turn_config?: Json
-            }
-            Returns: {
-              conflict_policy: string
-              content_rating: string
-              created_at: string
-              current_turn: number
-              id: string
-              model_config: Json
-              owner_id: string
-              status: string
-              title: string
-              turn_config: Json
-              universe_id: string | null
-              universe_version: number | null
-              updated_at: string
-              world_ledger: Json
-            }
-            SetofOptions: {
-              from: "*"
-              to: "stories"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-        | {
-            Args: {
-              p_content_rating: string
-              p_model_config: Json
-              p_owner_id: string
-              p_title: string
-              p_turn_config?: Json
-              p_universe_id?: string
-              p_universe_version?: number
-            }
-            Returns: {
-              conflict_policy: string
-              content_rating: string
-              created_at: string
-              current_turn: number
-              id: string
-              model_config: Json
-              owner_id: string
-              status: string
-              title: string
-              turn_config: Json
-              universe_id: string | null
-              universe_version: number | null
-              updated_at: string
-              world_ledger: Json
-            }
-            SetofOptions: {
-              from: "*"
-              to: "stories"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
+      create_story: {
+        Args: {
+          p_content_rating: string
+          p_model_config: Json
+          p_owner_id: string
+          p_title: string
+          p_turn_config?: Json
+          p_universe_id?: string
+          p_universe_version?: number
+        }
+        Returns: {
+          conflict_policy: string
+          content_rating: string
+          created_at: string
+          current_turn: number
+          id: string
+          model_config: Json
+          owner_id: string
+          status: string
+          title: string
+          turn_config: Json
+          universe_id: string | null
+          universe_version: number | null
+          updated_at: string
+          world_ledger: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "stories"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_universe_with_version: {
         Args: {
           p_canon_bible_rules_only?: Json
@@ -1555,6 +1553,10 @@ export type Database = {
         }
       }
       is_story_member: { Args: { target_story_id: string }; Returns: boolean }
+      is_story_member_for_universe: {
+        Args: { target_universe_id: string }
+        Returns: boolean
+      }
       is_story_owner: { Args: { target_story_id: string }; Returns: boolean }
       is_story_role: {
         Args: { roles: string[]; target_story_id: string }

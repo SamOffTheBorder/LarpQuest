@@ -14,13 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const SEVERITY_VARIANT = {
   block: 'destructive',
-  warn: 'secondary',
+  warn: 'warning',
   log: 'outline',
 } as const;
 
 const VERDICT_VARIANT = {
-  allow: 'outline',
-  allow_with_limits: 'secondary',
+  allow: 'success',
+  allow_with_limits: 'warning',
   reject: 'destructive',
 } as const;
 

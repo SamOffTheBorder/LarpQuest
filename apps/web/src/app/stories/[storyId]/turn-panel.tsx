@@ -152,7 +152,7 @@ export function TurnPanel({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {turn.sceneSetup !== null && <p className="text-sm">{turn.sceneSetup}</p>}
+        {turn.sceneSetup !== null && <p className="font-serif text-sm">{turn.sceneSetup}</p>}
 
         {turn.status === 'open' && (
           <>
@@ -177,7 +177,7 @@ export function TurnPanel({
           <div className="flex flex-col gap-2">
             <p className="text-sm text-muted-foreground">The narrator is writing…</p>
             {streamedProse !== null && streamedProse.length > 0 && (
-              <p className="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm leading-relaxed">
+              <p className="whitespace-pre-wrap rounded-md bg-muted p-3 font-serif text-sm leading-relaxed">
                 {streamedProse}
               </p>
             )}
@@ -197,7 +197,7 @@ export function TurnPanel({
               Generation failed: {turn.failureReason ?? 'Unknown error.'}
             </p>
             {turn.partialProse !== null && (
-              <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              <p className="rounded-md bg-muted p-3 font-serif text-sm text-muted-foreground">
                 Partial draft: {turn.partialProse}
               </p>
             )}
@@ -216,9 +216,9 @@ function TurnStatusBadge({ status }: { status: Turn['status'] }) {
     return <Badge variant="destructive">Failed</Badge>;
   }
 
-  if (status === 'generating' || status === 'locked') {
-    return <Badge variant="secondary">Generating</Badge>;
+  if (status === 'generating' || status === 'locked' || status === 'validating') {
+    return <Badge variant="warning">Generating</Badge>;
   }
 
-  return <Badge>Open</Badge>;
+  return <Badge variant="success">Open</Badge>;
 }

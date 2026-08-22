@@ -25,10 +25,13 @@ const STAGE_LABELS: Record<string, string> = {
   gaps: 'Confidence & Gaps',
 };
 
-const STATUS_VARIANT: Record<ResearchJobStatus['status'], 'default' | 'secondary' | 'destructive' | 'outline'> = {
+const STATUS_VARIANT: Record<
+  ResearchJobStatus['status'],
+  'success' | 'warning' | 'destructive' | 'outline'
+> = {
   queued: 'outline',
-  running: 'secondary',
-  complete: 'default',
+  running: 'warning',
+  complete: 'success',
   failed: 'destructive',
   skipped: 'outline',
 };

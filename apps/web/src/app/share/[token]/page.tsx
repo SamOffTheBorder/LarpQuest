@@ -41,7 +41,7 @@ export default async function SharedStoryPage({ params }: { params: Promise<{ to
               {chapter.videoUrls.map((url) => (
                 <video key={url} src={url} controls className="w-full rounded-md" />
               ))}
-              <p className="whitespace-pre-wrap text-sm">{chapter.prose}</p>
+              <p className="whitespace-pre-wrap font-serif text-sm">{chapter.prose}</p>
             </CardContent>
           </Card>
         ))

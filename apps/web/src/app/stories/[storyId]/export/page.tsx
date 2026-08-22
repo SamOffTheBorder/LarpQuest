@@ -12,8 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 const FORMATS: ExportFormat[] = ['markdown', 'pdf', 'epub'];
 
 const STATUS_VARIANT = {
-  queued: 'secondary',
-  complete: 'outline',
+  queued: 'warning',
+  complete: 'success',
   failed: 'destructive',
 } as const;
 
