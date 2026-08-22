@@ -580,3 +580,49 @@ verified by building against exactly it.
 Also: `apps/web/.env.example` was being excluded by a blanket `.env*` ignore
 rule and had never been committed, so nobody cloning the repo could see what to
 configure. Now tracked.
+
+### 2026-08-22 (cont.) — `7d95133`, `7e79b5b`, landing page
+
+**C1 Account deletion.** Resolved as anonymize-and-preserve, the plan's own
+recommendation. Migration `20260824000004` changes four `auth.users` foreign
+keys from cascade to `set null` — `stories.owner_id`, `submissions.user_id`,
+`universes.owner_id`, `universe_drafts.owner_id` — every other such FK was
+already `set null` from its original migration. Widening these surfaced six
+call sites the type checker found that assumed non-null owner/user ids; each
+checked individually, none needed further changes beyond the type.
+
+Deletion surfaced a real, previously-absent gap: a story's sole owner
+deleting their account would leave it permanently unmanageable (no one can
+satisfy `is_story_owner()`). Rather than auto-promoting a successor on the
+user's behalf, deletion is **blocked** until ownership is transferred —
+which required building ownership transfer as an actual feature
+(`transfer_story_ownership`, migration `20260824000005`, reachable from a
+story's Members page), not a one-off workaround.
+
+*Still open:* C1.2's "extend story export to a full account export" — what
+shipped is deletion/anonymization and transfer, not a data-portability
+export.
+
+**B3.1 Rate limiting.** Backed by Postgres (`check_rate_limit`, migration
+`20260824000006`) rather than Upstash/Redis — this deployment has no
+existing external-store dependency to extend, and Postgres already
+coordinates `extraction_queue` and `spend_to_date`. Wired into sign-in
+(keyed by IP), story creation, universe draft creation, turn generation, and
+invite creation — every reachable surface the plan named.
+`createShareLink` has no rate limit because it has no live UI entry point
+yet.
+
+*Still open:* B3.2 (CAPTCHA — not attempted), B3.6 (ban evasion — magic-link
+re-registration is unaddressed).
+
+**A4.1 Landing page.** Replaced the 9-line redirect with real content aimed
+at a signed-out visitor: the three-pillar pitch grounded in the build plan's
+own core thesis, the six turn modes, and links to sign-in and the
+marketplace. Signed-in visitors still redirect straight to `/stories`,
+unchanged.
+
+*Verification note:* confirmed via `curl` (200 status, all copy present,
+existing auth-redirect behavior on `/sign-in` and `/stories` unaffected) —
+no browser-automation tool was available in this environment for an actual
+visual/screenshot check. `127.0.0.1`, not `localhost`, is required to reach
+the Next dev server here; something else is bound to `[::1]:3000`.
