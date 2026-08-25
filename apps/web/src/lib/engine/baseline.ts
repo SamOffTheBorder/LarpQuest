@@ -2,6 +2,7 @@ import 'server-only';
 
 import { streamNarration } from '@/lib/ai/gateway';
 import { createBudgetGuard } from '@/lib/ai/spend';
+import { untrustedSections } from '@/lib/ai/untrusted';
 import { nullUsageRecorder } from '@/lib/ai/usage';
 import { assertMember } from '@/lib/engine/membership';
 import { resolveTurnMode } from '@/lib/engine/turn-modes';
@@ -96,11 +97,20 @@ export async function generateBaseline(
   // state, no world ledger, no tone directives — the exact absence this test
   // exists to measure the effect of.
   const baselinePrompt = [
-    `Story: ${storyResult.data.title}`,
-    priorChapters.length > 0
-      ? `Previous chapters:\n\n${priorChapters.map((c) => `Chapter ${c.turn_number}:\n${c.prose}`).join('\n\n')}`
-      : '(this is the first chapter)',
-    `Player actions this turn:\n${submissionsForTurn.length > 0 ? submissionsForTurn.join('\n') : '(none recorded)'}`,
+    untrustedSections([
+      { heading: 'Story', untrusted: storyResult.data.title },
+      priorChapters.length > 0
+        ? {
+            heading: 'Previous chapters',
+            untrusted: priorChapters
+              .map((c) => `Chapter ${c.turn_number}:\n${c.prose}`)
+              .join('\n\n'),
+          }
+        : { heading: 'Previous chapters', trusted: '(this is the first chapter)' },
+      submissionsForTurn.length > 0
+        ? { heading: 'Player actions this turn', untrusted: submissionsForTurn.join('\n') }
+        : { heading: 'Player actions this turn', trusted: '(none recorded)' },
+    ]),
     'Write the next chapter.',
   ].join('\n\n');
 

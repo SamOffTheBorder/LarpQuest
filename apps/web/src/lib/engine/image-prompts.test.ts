@@ -242,6 +242,32 @@ describe('image prompt worker', () => {
   });
 });
 
+describe('image prompt system prompt instructs consistent character appearance', () => {
+  it('instructs carrying over build, race, and hair from entity data', async () => {
+    const { IMAGE_PROMPT_SYSTEM_PROMPT } = await import('@/lib/engine/image-prompts');
+
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/build/i);
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/race or species/i);
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/hair/i);
+  });
+
+  it('instructs carrying over identity and depicting gear/equipment state', async () => {
+    const { IMAGE_PROMPT_SYSTEM_PROMPT } = await import('@/lib/engine/image-prompts');
+
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/identity/i);
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/gear, equipment, or clothing/i);
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/without their/i);
+  });
+
+  it('instructs allowing mid-fight moments while staying physically plausible', async () => {
+    const { IMAGE_PROMPT_SYSTEM_PROMPT } = await import('@/lib/engine/image-prompts');
+
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/middle of the exchange/i);
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/anatomically and\s+physically plausible/i);
+    expect(IMAGE_PROMPT_SYSTEM_PROMPT).toMatch(/impossible poses/i);
+  });
+});
+
 describe('image prompt generation is genre-agnostic', () => {
   it('succeeds identically for a power-system entity and a knowledge-only entity', async () => {
     const { runOneImagePromptGeneration } = await import('@/lib/engine/image-prompts');

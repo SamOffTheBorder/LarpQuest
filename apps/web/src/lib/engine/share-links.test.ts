@@ -106,6 +106,13 @@ vi.mock('@/lib/supabase/server', () => {
           resolve({ data: role !== undefined ? [{ role }] : [], error: null });
           return;
         }
+        if (table === 'share_links') {
+          const rows = [...state.shareLinks.values()].filter(
+            (row) => row.story_id === filters.story_id && row.revoked_at === null,
+          );
+          resolve({ data: rows, error: null });
+          return;
+        }
         resolve({ data: [], error: null });
       },
       async maybeSingle() {
@@ -144,7 +151,7 @@ vi.mock('@/lib/supabase/server', () => {
   };
 });
 
-const { createShareLink, revokeShareLink, resolveShareLink, getSharedStoryView } = await import(
+const { createShareLink, revokeShareLink, resolveShareLink, getSharedStoryView, listShareLinks } = await import(
   '@/lib/engine/share-links'
 );
 
@@ -206,6 +213,23 @@ describe('revokeShareLink and resolveShareLink', () => {
 
     await expect(revokeShareLink(link.id, PLAYER)).rejects.toThrow();
     await expect(resolveShareLink(link.token)).resolves.toBe(STORY);
+  });
+});
+
+describe('listShareLinks', () => {
+  it('owner sees active links, not revoked ones', async () => {
+    const active = await createShareLink(STORY, OWNER);
+    const revoked = await createShareLink(STORY, OWNER);
+    await revokeShareLink(revoked.id, OWNER);
+
+    const links = await listShareLinks(STORY, OWNER);
+
+    expect(links.map((l) => l.id)).toEqual([active.id]);
+  });
+
+  it('player cannot list share links', async () => {
+    await createShareLink(STORY, OWNER);
+    await expect(listShareLinks(STORY, PLAYER)).rejects.toThrow();
   });
 });
 

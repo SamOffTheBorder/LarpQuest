@@ -25,6 +25,7 @@ export interface ShareLinkRecord {
   token: string;
   createdBy: string | null;
   revokedAt: string | null;
+  createdAt: string;
 }
 
 interface ShareLinkRow {
@@ -33,6 +34,7 @@ interface ShareLinkRow {
   token: string;
   created_by: string | null;
   revoked_at: string | null;
+  created_at: string;
 }
 
 function toShareLinkRecord(row: ShareLinkRow): ShareLinkRecord {
@@ -42,10 +44,11 @@ function toShareLinkRecord(row: ShareLinkRow): ShareLinkRecord {
     token: row.token,
     createdBy: row.created_by,
     revokedAt: row.revoked_at,
+    createdAt: row.created_at,
   };
 }
 
-const SHARE_LINK_COLUMNS = 'id, story_id, token, created_by, revoked_at';
+const SHARE_LINK_COLUMNS = 'id, story_id, token, created_by, revoked_at, created_at';
 
 /** Owner/GM only. */
 export async function createShareLink(storyId: string, userId: string): Promise<ShareLinkRecord> {
@@ -91,6 +94,25 @@ export async function revokeShareLink(shareLinkId: string, userId: string): Prom
   if (updateError !== null) {
     throw new Error(`Failed to revoke share link: ${updateError.message}`);
   }
+}
+
+/** Owner/GM only. Active (non-revoked) links, most recent first. */
+export async function listShareLinks(storyId: string, userId: string): Promise<ShareLinkRecord[]> {
+  await requireRole(storyId, userId, ['owner', 'gm']);
+
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('share_links')
+    .select(SHARE_LINK_COLUMNS)
+    .eq('story_id', storyId)
+    .is('revoked_at', null)
+    .order('created_at', { ascending: false });
+
+  if (error !== null) {
+    throw new Error(`Failed to list share links: ${error.message}`);
+  }
+
+  return data.map(toShareLinkRecord);
 }
 
 /**
@@ -150,6 +172,7 @@ export async function getSharedStoryView(token: string): Promise<SharedStoryView
       .select('id, turn_number, prose, rolled_back_at')
       .eq('story_id', storyId)
       .is('rolled_back_at', null)
+      .is('hidden_at', null)
       .order('turn_number', { ascending: true }),
   ]);
 

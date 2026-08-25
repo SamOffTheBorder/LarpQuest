@@ -5,6 +5,8 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /** Per-story reporting of a chapter or submission (build plan 7.5). */
 
+export type ReportStatus = 'open' | 'resolved';
+
 export interface Report {
   id: string;
   storyId: string;
@@ -12,6 +14,9 @@ export interface Report {
   chapterId: string | null;
   submissionId: string | null;
   reason: string;
+  status: ReportStatus;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
   createdAt: string;
 }
 
@@ -22,6 +27,9 @@ interface ReportRow {
   chapter_id: string | null;
   submission_id: string | null;
   reason: string;
+  status: string;
+  resolved_by: string | null;
+  resolved_at: string | null;
   created_at: string;
 }
 
@@ -33,11 +41,15 @@ function toReport(row: ReportRow): Report {
     chapterId: row.chapter_id,
     submissionId: row.submission_id,
     reason: row.reason,
+    status: row.status as ReportStatus,
+    resolvedBy: row.resolved_by,
+    resolvedAt: row.resolved_at,
     createdAt: row.created_at,
   };
 }
 
-const REPORT_COLUMNS = 'id, story_id, reporter_id, chapter_id, submission_id, reason, created_at';
+const REPORT_COLUMNS =
+  'id, story_id, reporter_id, chapter_id, submission_id, reason, status, resolved_by, resolved_at, created_at';
 
 async function insertReport(
   storyId: string,
@@ -144,4 +156,45 @@ export async function listReports(storyId: string, userId: string): Promise<Repo
   }
 
   return data.map(toReport);
+}
+
+export class ReportNotFoundError extends Error {
+  constructor(readonly reportId: string) {
+    super(`Report ${reportId} not found.`);
+    this.name = 'ReportNotFoundError';
+  }
+}
+
+/** Owner/GM only. Marks a report resolved without altering its original fields. */
+export async function resolveReport(reportId: string, userId: string): Promise<Report> {
+  const supabase = createServiceRoleClient();
+
+  const { data: existing, error: readError } = await supabase
+    .from('story_reports')
+    .select('story_id')
+    .eq('id', reportId)
+    .maybeSingle();
+
+  if (readError !== null) {
+    throw new Error(`Failed to read report: ${readError.message}`);
+  }
+
+  if (existing === null) {
+    throw new ReportNotFoundError(reportId);
+  }
+
+  await requireRole(existing.story_id, userId, ['owner', 'gm']);
+
+  const { data, error } = await supabase
+    .from('story_reports')
+    .update({ status: 'resolved', resolved_by: userId, resolved_at: new Date().toISOString() })
+    .eq('id', reportId)
+    .select(REPORT_COLUMNS)
+    .single();
+
+  if (error !== null) {
+    throw new Error(`Failed to resolve report: ${error.message}`);
+  }
+
+  return toReport(data);
 }

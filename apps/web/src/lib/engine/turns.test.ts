@@ -10,14 +10,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   turns: new Map<string, Record<string, unknown>>(),
+  chapters: new Map<string, Record<string, unknown>>(),
   submissions: [] as Record<string, unknown>[],
   entities: new Map<string, Record<string, unknown>>(),
   /** key: `${storyId}:${userId}` -> role */
   members: new Map<string, string>(),
   /** Every table mutated, in order. Submissions must never appear. */
   writes: [] as { table: string; op: string }[],
-  narrationBehavior: 'succeed' as 'succeed' | 'throw' | 'incomplete',
+  narrationBehavior: 'succeed' as 'succeed' | 'throw' | 'incomplete' | 'turningPoint' | 'turningPointThenResolve',
   storyTurnConfig: {} as Record<string, unknown>,
+  storyOwnerId: 'user-1',
+  nextChapterNumber: 1,
+  continueFightBehavior: 'succeed' as 'succeed' | 'notFound',
 }));
 
 vi.mock('server-only', () => ({}));
@@ -56,7 +60,7 @@ vi.mock('@/lib/ai/gateway', () => ({
   },
   streamNarration: async (
     _deps: unknown,
-    args: { onChunk: (text: string) => void },
+    args: { onChunk: (text: string) => void; systemPrompt: string },
   ) => {
     args.onChunk('partial prose so far');
 
@@ -70,6 +74,30 @@ vi.mock('@/lib/ai/gateway', () => ({
         resolvedModel: 'm',
         usedFallbackModel: false,
         completed: false,
+      };
+    }
+
+    if (state.narrationBehavior === 'turningPoint') {
+      return {
+        prose: 'The blades clash in the rain.\n\n[TURNING_POINT]',
+        resolvedModel: 'm',
+        usedFallbackModel: false,
+        completed: true,
+      };
+    }
+
+    if (state.narrationBehavior === 'turningPointThenResolve') {
+      // Simulates a continuation turn: even if the model tries to emit the
+      // marker again, the prompt for a continuation never mentions it — this
+      // fixture emits it anyway to prove generateTurn ignores it regardless.
+      const eligible = args.systemPrompt.includes('[TURNING_POINT]');
+      return {
+        prose: eligible
+          ? 'The duel concludes.\n\n[TURNING_POINT]'
+          : 'The duel concludes with a final blow.',
+        resolvedModel: 'm',
+        usedFallbackModel: false,
+        completed: true,
       };
     }
 
@@ -198,9 +226,15 @@ vi.mock('@/lib/supabase/server', () => {
               turn_config: state.storyTurnConfig,
               content_rating: 'teen',
               conflict_policy: 'narrative_priority',
+              owner_id: state.storyOwnerId,
             },
             error: null,
           };
+        }
+
+        if (table === 'chapters') {
+          const found = state.chapters.get(builder._filters.id as string);
+          return { data: found ?? null, error: null };
         }
 
         return { data: null, error: null };
@@ -231,7 +265,53 @@ vi.mock('@/lib/supabase/server', () => {
           const id = args.p_turn_id as string;
           const existing = turnRow(id);
           state.turns.set(id, { ...existing, status: 'published' });
-          return { data: { id: 'chapter-1', turn_number: 1 }, error: null };
+
+          const chapterId = `chapter-${state.nextChapterNumber}`;
+          const chapter = {
+            id: chapterId,
+            story_id: existing?.story_id,
+            turn_id: id,
+            turn_number: existing?.turn_number ?? state.nextChapterNumber,
+            turn_mode: existing?.mode ?? 'action',
+            prose: args.p_prose,
+            continues_chapter_id: existing?.continues_chapter_id ?? null,
+          };
+          state.chapters.set(chapterId, chapter);
+          state.nextChapterNumber += 1;
+
+          return { data: chapter, error: null };
+        }
+
+        if (name === 'continue_fight_turn') {
+          if (state.continueFightBehavior === 'notFound') {
+            return { data: null, error: { message: 'chapter not found' } };
+          }
+
+          const originChapterId = args.p_chapter_id as string;
+          const originChapter = state.chapters.get(originChapterId);
+          const originTurn = originChapter?.turn_id !== undefined ? turnRow(originChapter.turn_id as string) : null;
+
+          const id = `turn-${state.turns.size + 1}`;
+          const row = {
+            id,
+            story_id: args.p_story_id,
+            turn_number: state.turns.size + 1,
+            mode: originChapter?.turn_mode ?? 'action',
+            scene_setup: null,
+            status: 'locked',
+            partial_prose: null,
+            failure_reason: null,
+            attempt_count: 0,
+            continues_chapter_id: originChapterId,
+          };
+          state.turns.set(id, row);
+
+          const originSubmissions = state.submissions.filter((sub) => sub.turn_id === originTurn?.id);
+          for (const sub of originSubmissions) {
+            state.submissions.push({ ...sub, id: `sub-${state.submissions.length + 1}`, turn_id: id });
+          }
+
+          return { data: row, error: null };
         }
 
         if (name === 'open_turn') {
@@ -264,6 +344,7 @@ const TURN = 'turn-1';
 
 beforeEach(() => {
   state.turns.clear();
+  state.chapters.clear();
   state.submissions.length = 0;
   state.entities.clear();
   state.writes.length = 0;
@@ -273,6 +354,9 @@ beforeEach(() => {
   state.members.set(`${STORY}:${USER}`, 'owner');
   state.narrationBehavior = 'succeed';
   state.storyTurnConfig = {};
+  state.storyOwnerId = USER;
+  state.nextChapterNumber = 1;
+  state.continueFightBehavior = 'succeed';
 
   state.turns.set(TURN, {
     id: TURN,
@@ -284,6 +368,7 @@ beforeEach(() => {
     partial_prose: null,
     failure_reason: null,
     attempt_count: 0,
+    continues_chapter_id: null,
   });
 });
 
@@ -601,5 +686,146 @@ describe('membership', () => {
     ).rejects.toThrow(/not found or not accessible/);
 
     expect(state.submissions).toHaveLength(0);
+  });
+});
+
+describe('fight-chapter-split', () => {
+  const FIGHTER_A = '11111111-1111-4111-8111-111111111111';
+  const FIGHTER_B = '22222222-2222-4222-8222-222222222222';
+  const FIGHTER_C = '33333333-3333-4333-8333-333333333333';
+
+  beforeEach(() => {
+    state.turns.set(TURN, { ...turnRow(TURN), mode: 'action' });
+    state.entities.set(FIGHTER_A, { id: FIGHTER_A, controlled_by: USER });
+    state.entities.set(FIGHTER_B, { id: FIGHTER_B, controlled_by: USER });
+    state.entities.set(FIGHTER_C, { id: FIGHTER_C, controlled_by: USER });
+  });
+
+  it('publishes chapter 1 with the marker stripped, then auto-generates and publishes chapter 2 with no new submission', async () => {
+    const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
+
+    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
+    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await lockTurn(TURN, USER);
+
+    state.narrationBehavior = 'turningPoint';
+    const result = await generateTurn(TURN, USER);
+
+    // Chapter 1's persisted prose never contains the marker.
+    expect(result.prose).not.toContain('[TURNING_POINT]');
+    expect(result.prose).toBe('The blades clash in the rain.');
+
+    const chapter1 = state.chapters.get(result.chapterId);
+    expect(chapter1?.continues_chapter_id).toBeNull();
+
+    // A second turn was created and driven to completion automatically —
+    // no createSubmission call happened for it in this test.
+    const allTurns = [...state.turns.values()];
+    expect(allTurns).toHaveLength(2);
+
+    const continuation = allTurns.find((t) => t.id !== TURN);
+    expect(continuation?.status).toBe('published');
+    expect(continuation?.continues_chapter_id).toBe(result.chapterId);
+
+    // The continuation's chapter records the back-link.
+    const chapter2 = [...state.chapters.values()].find((c) => c.turn_id === continuation?.id);
+    expect(chapter2?.continues_chapter_id).toBe(result.chapterId);
+  });
+
+  it('copies submissions forward onto the continuation turn without re-invoking createSubmission', async () => {
+    const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
+
+    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
+    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await lockTurn(TURN, USER);
+
+    state.narrationBehavior = 'turningPoint';
+    await generateTurn(TURN, USER);
+
+    const continuationTurn = [...state.turns.values()].find((t) => t.id !== TURN);
+    const copiedSubmissions = state.submissions.filter((s) => s.turn_id === continuationTurn?.id);
+
+    expect(copiedSubmissions).toHaveLength(2);
+    expect(copiedSubmissions.map((s) => s.content).sort()).toEqual(['I parry.', 'I strike.']);
+    // Copies are new rows distinct from the originals, not the same rows moved.
+    expect(state.submissions.filter((s) => s.turn_id === TURN)).toHaveLength(2);
+  });
+
+  it('never lets a continuation split again, even if the model emits the marker anyway', async () => {
+    const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
+
+    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
+    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await lockTurn(TURN, USER);
+
+    state.narrationBehavior = 'turningPointThenResolve';
+    await generateTurn(TURN, USER);
+
+    const continuationTurn = [...state.turns.values()].find((t) => t.id !== TURN);
+    expect(continuationTurn?.status).toBe('published');
+
+    // Only two chapters total exist — the continuation did not itself split
+    // into a third.
+    expect(state.chapters.size).toBe(2);
+
+    const chapter2 = [...state.chapters.values()].find((c) => c.turn_id === continuationTurn?.id);
+    expect(chapter2?.prose).not.toContain('[TURNING_POINT]');
+  });
+
+  it('group fights (3+ entities) never trigger a split, regardless of what the model emits', async () => {
+    const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
+
+    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
+    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await createSubmission(TURN, USER, { content: 'I flank.', entityId: FIGHTER_C });
+    await lockTurn(TURN, USER);
+
+    state.narrationBehavior = 'turningPoint';
+    const result = await generateTurn(TURN, USER);
+
+    expect(turnRow(TURN)?.status).toBe('published');
+    expect(state.chapters.size).toBe(1);
+    // The mock always appends the marker in 'turningPoint' mode regardless
+    // of eligibility — generateTurn must still strip it since a 3-entity
+    // turn's prompt never offered the option.
+    expect(result.prose).not.toContain('[TURNING_POINT]');
+  });
+
+  it("a continuation turn's own generation failure does not affect chapter 1", async () => {
+    const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
+    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await lockTurn(TURN, USER);
+
+    state.continueFightBehavior = 'notFound';
+    state.narrationBehavior = 'turningPoint';
+
+    const result = await generateTurn(TURN, USER);
+
+    // generateTurn's own return value reflects only chapter 1 — the
+    // continuation's failure never propagates into this call's result.
+    expect(result.prose).toBe('The blades clash in the rain.');
+    expect(turnRow(TURN)?.status).toBe('published');
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'fight continuation failed',
+      expect.objectContaining({ chapterId: result.chapterId }),
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('a single-entity turn is never eligible to split', async () => {
+    const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
+
+    await createSubmission(TURN, USER, { content: 'I strike the training dummy.', entityId: FIGHTER_A });
+    await lockTurn(TURN, USER);
+
+    state.narrationBehavior = 'turningPoint';
+    const result = await generateTurn(TURN, USER);
+
+    expect(result.prose).not.toContain('[TURNING_POINT]');
+    expect(state.chapters.size).toBe(1);
   });
 });

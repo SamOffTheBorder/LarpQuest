@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { callStructured, StructuredOutputError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
+import { untrustedSections, withUntrustedPreamble } from '@/lib/ai/untrusted';
 import type { Rule } from '@/lib/engine/rules/types';
 import { serverEnv } from '@/lib/env';
 
@@ -43,21 +44,23 @@ export class ValidatorOutputError extends Error {
   }
 }
 
-const VALIDATOR_SYSTEM_PROMPT = [
-  'You are validating a generated chapter draft against a list of rules for',
-  'this fictional universe. For every rule, determine whether the chapter',
-  'draft violates it. Respond with one entry per rule in `violations`, each',
-  'with `rule_id` matching the rule given, `violated` (true/false), a short',
-  '`description` of the violation when true (or why it does not apply when',
-  'false), and — only when the violation is attributable to one specific',
-  'entity or capability — `entity_id`/`capability_id` matching an id given in',
-  'context.',
-  '',
-  'Only report a rule as violated when the chapter draft actually contains',
-  'the violation. Do not invent violations to be thorough.',
-  '',
-  'Respond with JSON only, matching the required schema exactly.',
-].join('\n');
+const VALIDATOR_SYSTEM_PROMPT = withUntrustedPreamble(
+  [
+    'You are validating a generated chapter draft against a list of rules for',
+    'this fictional universe. For every rule, determine whether the chapter',
+    'draft violates it. Respond with one entry per rule in `violations`, each',
+    'with `rule_id` matching the rule given, `violated` (true/false), a short',
+    '`description` of the violation when true (or why it does not apply when',
+    'false), and — only when the violation is attributable to one specific',
+    'entity or capability — `entity_id`/`capability_id` matching an id given in',
+    'context.',
+    '',
+    'Only report a rule as violated when the chapter draft actually contains',
+    'the violation. Do not invent violations to be thorough.',
+    '',
+    'Respond with JSON only, matching the required schema exactly.',
+  ].join('\n'),
+);
 
 function buildValidatorPrompt(args: {
   chapterDraft: string;
@@ -68,11 +71,14 @@ function buildValidatorPrompt(args: {
     .map((rule) => `- id: ${rule.id}\n  severity: ${rule.severity}\n  check: ${rule.check}`)
     .join('\n');
 
-  return [
-    `## Chapter draft\n${args.chapterDraft}`,
-    `## Entities\n${args.entitiesText}`,
-    `## Rules to check\n${rulesText}`,
-  ].join('\n\n');
+  // The draft and the entity ledger are model output derived from player
+  // submissions; the rules are the platform's own scaffolding, so only the
+  // former two are fenced.
+  return untrustedSections([
+    { heading: 'Chapter draft', untrusted: args.chapterDraft },
+    { heading: 'Entities', untrusted: args.entitiesText },
+    { heading: 'Rules to check', trusted: rulesText },
+  ]);
 }
 
 export interface RunValidatorCallArgs {

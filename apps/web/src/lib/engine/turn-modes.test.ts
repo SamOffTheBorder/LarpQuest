@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_PACING,
   DEFAULT_TURN_MODE,
+  TURNING_POINT_MARKER,
   UnknownTurnModeError,
+  extractTurningPoint,
+  isTurningPointEligible,
+  readPacing,
+  registeredPacingValues,
   registeredTurnModes,
   resolveTurnMode,
 } from '@/lib/engine/turn-modes';
@@ -86,6 +92,42 @@ describe('content rating and conflict policy prompt wiring', () => {
   });
 });
 
+describe('pacing prompt wiring', () => {
+  const mode = resolveTurnMode('freeform');
+
+  it('each pacing value produces distinct prompt text', () => {
+    const tight = mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, pacing: 'tight' });
+    const normal = mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, pacing: 'normal' });
+    const expansive = mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, pacing: 'expansive' });
+
+    expect(new Set([tight, normal, expansive]).size).toBe(3);
+    expect(tight).toMatch(/keep the plot moving/i);
+    expect(normal).toMatch(/balance plot progression with downtime/i);
+    expect(expansive).toMatch(/favor downtime, filler, and training/i);
+  });
+
+  it('omitted pacing falls back to the same text as the default value', () => {
+    const omitted = mode.systemPrompt(DEFAULT_STORY_CONTEXT);
+    const explicitDefault = mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, pacing: DEFAULT_PACING });
+
+    expect(omitted).toBe(explicitDefault);
+  });
+
+  it('an unrecognized pacing value falls back rather than throwing', () => {
+    expect(() => mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, pacing: 'breakneck' })).not.toThrow();
+  });
+
+  it('registers the three pacing values', () => {
+    expect([...registeredPacingValues()].sort()).toEqual(['expansive', 'normal', 'tight']);
+  });
+
+  it('readPacing falls back to the default for missing or malformed turn_config', () => {
+    expect(readPacing(null)).toBe(DEFAULT_PACING);
+    expect(readPacing({})).toBe(DEFAULT_PACING);
+    expect(readPacing({ pacing: 'tight' })).toBe('tight');
+  });
+});
+
 describe('gatekeeper ruling prompt wiring', () => {
   const mode = resolveTurnMode(DEFAULT_TURN_MODE);
 
@@ -105,6 +147,105 @@ describe('gatekeeper ruling prompt wiring', () => {
 
     expect(prompt).toMatch(/Gatekeeper/i);
     expect(prompt).toContain('Yuji proposed: "Domain Expansion"');
+  });
+});
+
+describe('isTurningPointEligible', () => {
+  it('is eligible for exactly two distinct entities and no continuation', () => {
+    expect(isTurningPointEligible(['a', 'b'], null)).toBe(true);
+    expect(isTurningPointEligible(['a', 'b', 'a'], null)).toBe(true);
+  });
+
+  it('is ineligible for one entity', () => {
+    expect(isTurningPointEligible(['a'], null)).toBe(false);
+    expect(isTurningPointEligible(['a', 'a'], null)).toBe(false);
+  });
+
+  it('is ineligible for three or more distinct entities', () => {
+    expect(isTurningPointEligible(['a', 'b', 'c'], null)).toBe(false);
+  });
+
+  it('is ineligible when the turn is itself a continuation', () => {
+    expect(isTurningPointEligible(['a', 'b'], 'chapter-1')).toBe(false);
+  });
+
+  it('ignores null entity ids when counting', () => {
+    expect(isTurningPointEligible(['a', 'b', null], null)).toBe(true);
+    expect(isTurningPointEligible([null, null], null)).toBe(false);
+  });
+});
+
+describe('extractTurningPoint', () => {
+  it('detects and strips a trailing marker when eligible', () => {
+    const result = extractTurningPoint(`They clash blades in the rain.\n\n${TURNING_POINT_MARKER}`, true);
+
+    expect(result.turningPoint).toBe(true);
+    expect(result.prose).toBe('They clash blades in the rain.');
+    expect(result.prose).not.toContain(TURNING_POINT_MARKER);
+  });
+
+  it('strips the marker but reports no turning point when ineligible', () => {
+    const result = extractTurningPoint(`The battle rages on.\n${TURNING_POINT_MARKER}`, false);
+
+    expect(result.turningPoint).toBe(false);
+    expect(result.prose).toBe('The battle rages on.');
+  });
+
+  it('leaves prose untouched when no marker is present', () => {
+    const result = extractTurningPoint('The fight ends with a decisive blow.', true);
+
+    expect(result.turningPoint).toBe(false);
+    expect(result.prose).toBe('The fight ends with a decisive blow.');
+  });
+
+  it('does not match the marker embedded mid-sentence', () => {
+    const prose = `She shouted ${TURNING_POINT_MARKER} but it meant nothing here.`;
+    const result = extractTurningPoint(prose, true);
+
+    expect(result.turningPoint).toBe(false);
+    expect(result.prose).toBe(prose);
+  });
+
+  it('does not match a near-miss of the marker text', () => {
+    const result = extractTurningPoint('The fight continues.\n[turning_point]', true);
+
+    expect(result.turningPoint).toBe(false);
+    expect(result.prose).toBe('The fight continues.\n[turning_point]');
+  });
+});
+
+describe('action mode fight-intensity instructions', () => {
+  it('instructs intense, detailed fight prose bounded by plausibility', () => {
+    const mode = resolveTurnMode('action');
+    const prompt = mode.systemPrompt(DEFAULT_STORY_CONTEXT);
+
+    expect(prompt).toMatch(/jaw-dropping/i);
+    expect(prompt).toMatch(/thrilling/i);
+    expect(prompt).toMatch(/moment-to-moment detail/i);
+    expect(prompt).toMatch(/physically plausible/i);
+  });
+});
+
+describe('action mode turning-point marker prompt wiring', () => {
+  it('mentions the marker only when turningPointEligible is true', () => {
+    const mode = resolveTurnMode('action');
+    const eligible = mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, turningPointEligible: true });
+    const ineligible = mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, turningPointEligible: false });
+    const omitted = mode.systemPrompt(DEFAULT_STORY_CONTEXT);
+
+    expect(eligible).toContain(TURNING_POINT_MARKER);
+    expect(ineligible).not.toContain(TURNING_POINT_MARKER);
+    expect(omitted).not.toContain(TURNING_POINT_MARKER);
+  });
+
+  it('other modes never mention the marker regardless of the flag', () => {
+    const modes = registeredTurnModes().filter((name) => name !== 'action');
+
+    for (const name of modes) {
+      const mode = resolveTurnMode(name);
+      const prompt = mode.systemPrompt({ ...DEFAULT_STORY_CONTEXT, turningPointEligible: true });
+      expect(prompt).not.toContain(TURNING_POINT_MARKER);
+    }
   });
 });
 

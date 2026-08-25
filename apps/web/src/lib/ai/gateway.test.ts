@@ -119,6 +119,10 @@ describe('callStructured', () => {
     expect(retryUserMessage).toContain('failed validation');
     expect(retryUserMessage).toContain('"field":"status"');
 
+    // The rejected response is fed back fenced: it is model output that may
+    // itself have been steered by injected content in the original prompt.
+    expect(retryUserMessage).toMatch(/<untrusted label="Previous response" id="[0-9a-f]+">/);
+
     // Both attempts are logged, the failed one included.
     expect(usage.calls).toHaveLength(2);
     expect(usage.calls[0]?.succeeded).toBe(false);

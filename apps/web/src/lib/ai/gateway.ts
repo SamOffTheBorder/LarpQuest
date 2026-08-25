@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import type { ModelConfig, ModelRole } from '@/lib/ai/roles';
 import { resolveModel } from '@/lib/ai/roles';
+import { untrustedSections } from '@/lib/ai/untrusted';
 
 /**
  * The OpenRouter gateway.
@@ -229,7 +230,17 @@ export async function callStructured<T>(
 
       if (attempt < MAX_STRUCTURED_ATTEMPTS) {
         const errorMessage = error instanceof z.ZodError ? error.message : String(error);
-        userPrompt = `${args.userPrompt}\n\nYour previous response failed validation:\n${errorMessage}\n\nPrevious response:\n${content}\n\nRespond again with valid JSON matching the required shape.`;
+        // The rejected response is fenced like any other untrusted text: it is
+        // model output that may itself have been steered by injected content in
+        // the original prompt, and it is being fed back in for the model to
+        // correct — as data, not as a fresh instruction.
+        userPrompt = [
+          args.userPrompt,
+          'Your previous response failed validation:',
+          errorMessage,
+          untrustedSections([{ heading: 'Previous response', untrusted: content }]),
+          'Respond again with valid JSON matching the required shape.',
+        ].join('\n\n');
         continue;
       }
 

@@ -9,6 +9,7 @@ import { StoryNotFoundError, getStory } from '@/lib/engine/stories';
 import { getLiveTurn, listSubmissionsForTurn } from '@/lib/engine/turns';
 import { getStoryCostUsd } from '@/lib/engine/usage-summary';
 import { ArchiveButton } from '@/app/stories/[storyId]/archive-button';
+import { HideChapterButton } from '@/app/stories/[storyId]/hide-chapter-button';
 import { ModelSettings } from '@/app/stories/[storyId]/model-settings';
 import { ReportChapterButton } from '@/app/stories/[storyId]/report-chapter-button';
 import { RollbackButton } from '@/app/stories/[storyId]/rollback-button';
@@ -125,15 +126,25 @@ export default async function StoryPage({
                 <div className="flex flex-wrap items-center gap-2">
                   <CardTitle>Chapter {chapter.turnNumber}</CardTitle>
                   {chapter.rolledBackAt !== null && <Badge variant="secondary">Rolled back</Badge>}
+                  {chapter.hiddenAt !== null && <Badge variant="destructive">Hidden from members</Badge>}
                   {chapter.extractionStatus === 'pending' ? (
                     <Badge variant="secondary">State update pending</Badge>
                   ) : chapter.extractionStatus === 'failed' ? (
                     <Badge variant="destructive">Extraction failed — retrying</Badge>
                   ) : null}
                 </div>
-                {owner && chapter.rolledBackAt === null && (
-                  <RollbackButton storyId={storyId} chapterId={chapter.id} />
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {isGM && (
+                    <HideChapterButton
+                      storyId={storyId}
+                      chapterId={chapter.id}
+                      hidden={chapter.hiddenAt !== null}
+                    />
+                  )}
+                  {owner && chapter.rolledBackAt === null && (
+                    <RollbackButton storyId={storyId} chapterId={chapter.id} />
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="whitespace-pre-wrap font-serif text-sm leading-relaxed">
                 {chapter.prose}

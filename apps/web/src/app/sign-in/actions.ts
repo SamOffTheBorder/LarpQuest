@@ -3,6 +3,7 @@
 import { z } from 'zod';
 
 import { clientEnv } from '@/lib/env';
+import { recordLegalAcceptance } from '@/lib/legal';
 import { assertWithinRateLimit, RateLimitExceededError } from '@/lib/rate-limit';
 import { callerIp } from '@/lib/request-ip';
 import { createClient } from '@/lib/supabase/server';
@@ -29,6 +30,13 @@ export async function signInAction(
     return { status: 'error', message: 'Enter a valid email address.' };
   }
 
+  if (formData.get('agreeToLegal') !== 'on') {
+    return {
+      status: 'error',
+      message: 'You must agree to the Terms, Privacy Policy, and Acceptable Use Policy.',
+    };
+  }
+
   try {
     await assertWithinRateLimit('sign_in', await callerIp());
   } catch (error) {
@@ -37,6 +45,8 @@ export async function signInAction(
     }
     throw error;
   }
+
+  await recordLegalAcceptance(parsed.data);
 
   const supabase = await createClient();
 

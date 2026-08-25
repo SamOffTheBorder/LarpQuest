@@ -5,6 +5,7 @@ import { requireUser } from '@/lib/auth';
 import { listInvites } from '@/lib/engine/invites';
 import { listMembers, requireRole } from '@/lib/engine/membership';
 import { listReports } from '@/lib/engine/reports';
+import { listShareLinks } from '@/lib/engine/share-links';
 import { StoryNotFoundError, getStory } from '@/lib/engine/stories';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +13,7 @@ import { InviteForm } from '@/app/stories/[storyId]/members/invite-form';
 import { InviteList } from '@/app/stories/[storyId]/members/invite-list';
 import { MemberList } from '@/app/stories/[storyId]/members/member-list';
 import { ReportList } from '@/app/stories/[storyId]/members/report-list';
+import { ShareLinkList } from '@/app/stories/[storyId]/members/share-link-list';
 
 export default async function MembersPage({
   params,
@@ -36,9 +38,9 @@ export default async function MembersPage({
     (member) => member.userId === user.id && (member.role === 'owner' || member.role === 'gm'),
   );
 
-  const [invites, reports] = isManager
-    ? await Promise.all([listInvites(storyId, user.id), listReports(storyId, user.id)])
-    : [[], []];
+  const [invites, reports, shareLinks] = isManager
+    ? await Promise.all([listInvites(storyId, user.id), listReports(storyId, user.id), listShareLinks(storyId, user.id)])
+    : [[], [], []];
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
@@ -72,10 +74,19 @@ export default async function MembersPage({
 
           <Card>
             <CardHeader>
+              <CardTitle className="text-base">Share links</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ShareLinkList storyId={storyId} shareLinks={shareLinks} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-base">Reports</CardTitle>
             </CardHeader>
             <CardContent>
-              <ReportList reports={reports} />
+              <ReportList storyId={storyId} reports={reports} />
             </CardContent>
           </Card>
         </>

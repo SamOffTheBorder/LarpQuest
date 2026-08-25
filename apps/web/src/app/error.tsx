@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 
 import { ErrorState } from '@/components/error-state';
 
@@ -17,8 +18,9 @@ export default function RootError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Nothing is wired to an error tracker yet; the console at least surfaces
-    // it in local development and in the platform's runtime logs.
+    Sentry.captureException(error);
+    // The console still surfaces it in local development and in the
+    // platform's runtime logs even when no Sentry DSN is configured.
     console.error(error);
   }, [error]);
 

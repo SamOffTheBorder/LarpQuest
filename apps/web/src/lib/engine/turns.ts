@@ -6,6 +6,7 @@ import { streamNarration } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
 import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
+import { newFenceNonce } from '@/lib/ai/untrusted';
 import {
   assembleContext,
   DEFAULT_CONTEXT_POLICY as ENGINE_DEFAULT_CONTEXT_POLICY,
@@ -17,7 +18,13 @@ import { evaluateProposal } from '@/lib/engine/gatekeeper';
 import { assertMember, requireRole } from '@/lib/engine/membership';
 import { DEFAULT_PROGRESSION_MODEL } from '@/lib/engine/progression-models';
 import { ruleSchema, type CanonException, type Rule } from '@/lib/engine/rules/types';
-import { readActiveMode, resolveTurnMode } from '@/lib/engine/turn-modes';
+import {
+  extractTurningPoint,
+  isTurningPointEligible,
+  readActiveMode,
+  readPacing,
+  resolveTurnMode,
+} from '@/lib/engine/turn-modes';
 import { acceptsSubmissions, assertTransition, type TurnStatus } from '@/lib/engine/turn-state';
 import {
   buildBlockRetryAddendum,
@@ -54,6 +61,9 @@ export interface Turn {
   partialProse: string | null;
   failureReason: string | null;
   attemptCount: number;
+  /** Set when this turn is a fight-chapter-split continuation, referencing
+   * the chapter it continues. Null for every ordinary turn. */
+  continuesChapterId: string | null;
 }
 
 interface TurnRow {
@@ -66,6 +76,7 @@ interface TurnRow {
   partial_prose: string | null;
   failure_reason: string | null;
   attempt_count: number;
+  continues_chapter_id: string | null;
 }
 
 function toTurn(row: TurnRow): Turn {
@@ -79,11 +90,12 @@ function toTurn(row: TurnRow): Turn {
     partialProse: row.partial_prose,
     failureReason: row.failure_reason,
     attemptCount: row.attempt_count,
+    continuesChapterId: row.continues_chapter_id,
   };
 }
 
 const TURN_COLUMNS =
-  'id, story_id, turn_number, mode, scene_setup, status, partial_prose, failure_reason, attempt_count';
+  'id, story_id, turn_number, mode, scene_setup, status, partial_prose, failure_reason, attempt_count, continues_chapter_id';
 
 export class TurnNotFoundError extends Error {
   constructor(readonly turnId: string) {
@@ -640,6 +652,13 @@ export async function generateTurn(
     // hands before it writes, for either attempt).
     const gatekeeperRulings = await evaluateTurnProposals(turn.storyId, context, canonExceptions, userId);
 
+    // fight-chapter-split: computed once, from submission structure alone —
+    // never re-evaluated per retry attempt, and enforced again below
+    // regardless of what the model actually emits.
+    const turningPointEligible = isTurningPointEligible(context.submissionEntityIds, turn.continuesChapterId);
+
+    let turningPoint = false;
+
     for (;;) {
       const result = await streamNarration(
         {
@@ -652,7 +671,9 @@ export async function generateTurn(
           systemPrompt: mode.systemPrompt({
             contentRating: context.contentRating,
             conflictPolicy: context.conflictPolicy,
+            pacing: context.pacing,
             gatekeeperRulings,
+            turningPointEligible,
           }),
           userPrompt: promptAddendum === null ? context.prompt : `${context.prompt}\n\n${promptAddendum}`,
           onChunk: (accumulated) => {
@@ -671,6 +692,13 @@ export async function generateTurn(
             : 'The narration stream ended before completing.',
         );
       }
+
+      // Strip the marker before it ever reaches validation, persistence, or
+      // a reader — regardless of eligibility, so an ineligible turn's
+      // accidental marker never leaks into a published chapter.
+      const extracted = extractTurningPoint(result.prose, turningPointEligible);
+      result.prose = extracted.prose;
+      turningPoint = extracted.turningPoint;
 
       // generating -> validating: the draft is complete, but not yet publishable.
       const { error: validatingError } = await supabase
@@ -708,6 +736,23 @@ export async function generateTurn(
         }
 
         const chapter = published as unknown as { id: string; turn_number: number };
+
+        // fight-chapter-split: chapter 1 is already committed and published
+        // above by this point — a continuation failure must never alter,
+        // unpublish, or delay it, so it is caught and logged here rather
+        // than propagated, same isolation pattern as
+        // queueChapterIllustration's catch in image-prompts.ts.
+        if (turningPoint) {
+          try {
+            await continueFight(chapter.id, turn.storyId);
+          } catch (continuationCause) {
+            console.error('fight continuation failed', {
+              chapterId: chapter.id,
+              storyId: turn.storyId,
+              message: continuationCause instanceof Error ? continuationCause.message : String(continuationCause),
+            });
+          }
+        }
 
         return {
           chapterId: chapter.id,
@@ -747,6 +792,56 @@ export async function generateTurn(
     await markTurnFailed(turnId, streamed, cause);
     throw cause;
   }
+}
+
+/**
+ * fight-chapter-split: create and drive the automatic continuation turn that
+ * resolves a fight after chapter `chapterId` published with the
+ * turning-point marker.
+ *
+ * `continue_fight_turn` (RPC) atomically creates the new turn already
+ * `locked` — same one-live-turn advisory lock as `open_turn` — with
+ * submissions copied forward from the originating turn's turn_id. From
+ * there this is exactly `generateTurn`'s own path: no acting user (there is
+ * none), no moderation re-check (the content isn't new — see the RPC
+ * comment), and `turn.continuesChapterId` being set means `generateTurn`'s
+ * own eligibility check (`isTurningPointEligible`) forces this generation to
+ * resolve the fight rather than split again.
+ *
+ * Callers must not let a failure here propagate into the original
+ * `generateTurn` call's result — see the isolated catch at the call site.
+ */
+async function continueFight(chapterId: string, storyId: string): Promise<void> {
+  const supabase = createServiceRoleClient();
+
+  const { data: created, error } = await supabase.rpc('continue_fight_turn', {
+    p_chapter_id: chapterId,
+    p_story_id: storyId,
+  });
+
+  if (error !== null || created === null) {
+    throw new Error(error?.message ?? 'continue_fight_turn returned no row');
+  }
+
+  const turn = toTurn(created as unknown as TurnRow);
+
+  // No acting user drives this call, and generateTurn's own assertMember
+  // check would fail without one — pass the story's owner. loadTurn/
+  // assertMember only gate on membership, which the owner always has; this
+  // mirrors the system-initiated nature of this whole path (design.md
+  // Decision 3), not a privilege escalation, since no player-facing action
+  // is being taken on anyone's behalf.
+  const { data: story, error: storyError } = await supabase
+    .from('stories')
+    .select('owner_id')
+    .eq('id', storyId)
+    .single();
+
+  if (storyError !== null || story === null || story.owner_id === null) {
+    throw new Error(storyError?.message ?? `Story ${storyId} has no owner to attribute this continuation to.`);
+  }
+
+  await generateTurn(turn.id, story.owner_id);
 }
 
 /**
@@ -806,9 +901,13 @@ interface TurnContext {
   modelConfig: ModelConfig | null;
   contentRating: string;
   conflictPolicy: string;
+  pacing: string;
   progressionModel: string;
   validationRules: Rule[];
   proposalSubmissions: { entityId: string | null; proposal: string }[];
+  /** entity_id of every submission on this turn, for the fight-chapter-split
+   * eligibility check (exactly 2 distinct entities). */
+  submissionEntityIds: (string | null)[];
 }
 
 /**
@@ -980,6 +1079,9 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
     retrievedSummaries,
     submissions,
     policy: contextPolicy,
+    // Fresh per assembly, so the fences around this turn's player content
+    // cannot be predicted by whoever wrote that content.
+    fenceNonce: newFenceNonce(),
   });
 
   return {
@@ -989,9 +1091,11 @@ async function buildTurnContext(turn: Turn): Promise<TurnContext> {
     modelConfig,
     contentRating: story.content_rating,
     conflictPolicy: story.conflict_policy,
+    pacing: readPacing(story.turn_config),
     progressionModel,
     validationRules,
     proposalSubmissions,
+    submissionEntityIds: submissionResult.data.map((row) => row.entity_id),
   };
 }
 

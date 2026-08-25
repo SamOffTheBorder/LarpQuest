@@ -1,12 +1,14 @@
 import Link from 'next/link';
 
 import { getUser } from '@/lib/auth';
+import { getProfile } from '@/lib/engine/profiles';
 import { StoryForgeMark } from '@/components/storyforge-mark';
 import { UserMenu } from '@/components/user-menu';
 import { buttonVariants } from '@/components/ui/button';
 
 export async function AppHeader() {
   const user = await getUser();
+  const profile = user !== null ? await getProfile(user.id) : null;
 
   return (
     <header className="border-b border-border">
@@ -18,7 +20,7 @@ export async function AppHeader() {
           </span>
         </Link>
         {user !== null ? (
-          <UserMenu email={user.email ?? 'Account'} />
+          <UserMenu displayName={profile?.username ?? user.email ?? 'Account'} />
         ) : (
           <Link href="/sign-in" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             Sign in

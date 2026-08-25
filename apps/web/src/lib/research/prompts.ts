@@ -1,3 +1,4 @@
+import { untrustedSections, withUntrustedPreamble, type PromptSection } from '@/lib/ai/untrusted';
 import type { DraftInput } from '@/lib/research/schemas';
 
 /**
@@ -19,15 +20,28 @@ const CONFIDENCE_INSTRUCTION =
   'identify one. Mark confidence "low" rather than guessing when you are not ' +
   'sure — a visible gap is more useful than a confident-sounding fabrication.';
 
+/**
+ * Every field here is user-supplied, and `sourceText` in particular is an
+ * attacker-controlled document entering the pipeline whose output becomes a
+ * universe's canon rules — which then feed the gatekeeper and validator on
+ * every subsequent turn. All of it is fenced as untrusted content so a stage
+ * reads it as material to research, never as direction about how to research.
+ */
 function inputContext(input: DraftInput): string {
-  const lines = [`Universe: ${input.name}`];
-  if (input.canonCutoff !== undefined) lines.push(`Canon cutoff: ${input.canonCutoff}`);
-  if (input.auNotes !== undefined) lines.push(`AU/divergence notes: ${input.auNotes}`);
-  if (input.sourceText !== undefined) lines.push(`\nSource material provided by the user:\n${input.sourceText}`);
-  return lines.join('\n');
+  const sections: PromptSection[] = [{ heading: 'Universe', untrusted: input.name }];
+  if (input.canonCutoff !== undefined) {
+    sections.push({ heading: 'Canon cutoff', untrusted: input.canonCutoff });
+  }
+  if (input.auNotes !== undefined) {
+    sections.push({ heading: 'AU/divergence notes', untrusted: input.auNotes });
+  }
+  if (input.sourceText !== undefined) {
+    sections.push({ heading: 'Source material provided by the user', untrusted: input.sourceText });
+  }
+  return untrustedSections(sections);
 }
 
-export const SCOPING_SYSTEM_PROMPT = [
+const SCOPING_SYSTEM_PROMPT_BODY = [
   'You are researching a fictional universe to classify it before deeper',
   'research begins. Identify what kind of universe this is: its media type,',
   'genre, whether it has a power/ability system, its scale, its primary',
@@ -43,7 +57,7 @@ export function buildScopingPrompt(input: DraftInput): string {
   return inputContext(input);
 }
 
-export const RULES_SYSTEM_PROMPT = [
+const RULES_SYSTEM_PROMPT_BODY = [
   "You are documenting a fictional universe's hard rules: what is possible,",
   'what is impossible, and what has a cost. Produce a list of discrete rule',
   'objects, each with a short id and a description.',
@@ -54,10 +68,10 @@ export const RULES_SYSTEM_PROMPT = [
 ].join('\n');
 
 export function buildRulesPrompt(input: DraftInput, scoping: unknown): string {
-  return [inputContext(input), `## Scoping (from Stage 1)\n${JSON.stringify(scoping)}`].join('\n\n');
+  return [inputContext(input), untrustedSections([{ heading: 'Scoping (from Stage 1)', untrusted: JSON.stringify(scoping) }])].join('\n\n');
 }
 
-export const PROGRESSION_SYSTEM_PROMPT = [
+const PROGRESSION_SYSTEM_PROMPT_BODY = [
   "You are documenting a fictional universe's power or progression system in",
   'depth: how abilities/power are gained, what limits exist, how scaling',
   'works, what established tiers exist, and what the known ceiling is. This',
@@ -70,10 +84,10 @@ export const PROGRESSION_SYSTEM_PROMPT = [
 ].join('\n');
 
 export function buildProgressionPrompt(input: DraftInput, scoping: unknown): string {
-  return [inputContext(input), `## Scoping (from Stage 1)\n${JSON.stringify(scoping)}`].join('\n\n');
+  return [inputContext(input), untrustedSections([{ heading: 'Scoping (from Stage 1)', untrusted: JSON.stringify(scoping) }])].join('\n\n');
 }
 
-export const ENTITIES_SYSTEM_PROMPT = [
+const ENTITIES_SYSTEM_PROMPT_BODY = [
   'You are documenting the major canonical entities of a fictional universe:',
   'characters, factions, and locations. For each, give a name, role,',
   'capabilities, status at the canon cutoff (flag anyone dead or',
@@ -91,12 +105,12 @@ export function buildEntitiesPrompt(
 ): string {
   return [
     inputContext(input),
-    `## Scoping (from Stage 1)\n${JSON.stringify(scoping)}`,
-    `## Rules (from Stage 2)\n${JSON.stringify(rules)}`,
+    untrustedSections([{ heading: 'Scoping (from Stage 1)', untrusted: JSON.stringify(scoping) }]),
+    untrustedSections([{ heading: 'Rules (from Stage 2)', untrusted: JSON.stringify(rules) }]),
   ].join('\n\n');
 }
 
-export const TIMELINE_SYSTEM_PROMPT = [
+const TIMELINE_SYSTEM_PROMPT_BODY = [
   "You are documenting a fictional universe's timeline and canon state at the",
   'given cutoff: where the story starts, what has already happened, and what',
   'is currently unresolved. This becomes the opening world ledger.',
@@ -107,12 +121,12 @@ export const TIMELINE_SYSTEM_PROMPT = [
 ].join('\n');
 
 export function buildTimelinePrompt(input: DraftInput, entities: unknown): string {
-  return [inputContext(input), `## Canonical entities (from Stage 4)\n${JSON.stringify(entities)}`].join(
+  return [inputContext(input), untrustedSections([{ heading: 'Canonical entities (from Stage 4)', untrusted: JSON.stringify(entities) }])].join(
     '\n\n',
   );
 }
 
-export const SCHEMA_DERIVATION_SYSTEM_PROMPT = [
+const SCHEMA_DERIVATION_SYSTEM_PROMPT_BODY = [
   'You are deriving an Entity Schema and Progression Model for a fictional',
   'universe from research already gathered, not choosing from a fixed menu.',
   '',
@@ -139,20 +153,20 @@ export function buildSchemaDerivationPrompt(
 ): string {
   const parts = [
     inputContext(input),
-    `## Scoping (from Stage 1)\n${JSON.stringify(scoping)}`,
-    `## Canonical entities (from Stage 4)\n${JSON.stringify(entities)}`,
+    untrustedSections([{ heading: 'Scoping (from Stage 1)', untrusted: JSON.stringify(scoping) }]),
+    untrustedSections([{ heading: 'Canonical entities (from Stage 4)', untrusted: JSON.stringify(entities) }]),
   ];
 
   parts.push(
     progression === null
       ? '## Progression (Stage 3)\nSkipped — this universe has no power/progression system.'
-      : `## Progression (from Stage 3)\n${JSON.stringify(progression)}`,
+      : untrustedSections([{ heading: 'Progression (from Stage 3)', untrusted: JSON.stringify(progression) }]),
   );
 
   return parts.join('\n\n');
 }
 
-export const RULE_PACK_SYSTEM_PROMPT = [
+const RULE_PACK_SYSTEM_PROMPT_BODY = [
   'You are converting researched rules into a validation rule pack. Each rule',
   'needs a short id, a source of "research" (you are generating it from prior',
   'stages, never "engine" or "user"), a check describing what to flag in',
@@ -179,15 +193,28 @@ export function buildRulePackPrompt(
 ): string {
   const parts = [
     inputContext(input),
-    `## Scoping (from Stage 1)\n${JSON.stringify(scoping)}`,
-    `## Rules (from Stage 2)\n${JSON.stringify(rules)}`,
+    untrustedSections([{ heading: 'Scoping (from Stage 1)', untrusted: JSON.stringify(scoping) }]),
+    untrustedSections([{ heading: 'Rules (from Stage 2)', untrusted: JSON.stringify(rules) }]),
   ];
 
   parts.push(
     progression === null
       ? '## Progression (Stage 3)\nSkipped — this universe has no power/progression system.'
-      : `## Progression (from Stage 3)\n${JSON.stringify(progression)}`,
+      : untrustedSections([{ heading: 'Progression (from Stage 3)', untrusted: JSON.stringify(progression) }]),
   );
 
   return parts.join('\n\n');
 }
+
+/**
+ * Every stage prompt carries the standing data/instruction separation: each
+ * one embeds user-supplied input, and stages 2+ additionally embed upstream
+ * stage output that was itself derived from that input.
+ */
+export const SCOPING_SYSTEM_PROMPT = withUntrustedPreamble(SCOPING_SYSTEM_PROMPT_BODY);
+export const RULES_SYSTEM_PROMPT = withUntrustedPreamble(RULES_SYSTEM_PROMPT_BODY);
+export const PROGRESSION_SYSTEM_PROMPT = withUntrustedPreamble(PROGRESSION_SYSTEM_PROMPT_BODY);
+export const ENTITIES_SYSTEM_PROMPT = withUntrustedPreamble(ENTITIES_SYSTEM_PROMPT_BODY);
+export const TIMELINE_SYSTEM_PROMPT = withUntrustedPreamble(TIMELINE_SYSTEM_PROMPT_BODY);
+export const SCHEMA_DERIVATION_SYSTEM_PROMPT = withUntrustedPreamble(SCHEMA_DERIVATION_SYSTEM_PROMPT_BODY);
+export const RULE_PACK_SYSTEM_PROMPT = withUntrustedPreamble(RULE_PACK_SYSTEM_PROMPT_BODY);

@@ -21,7 +21,8 @@ export type RateLimitedAction =
   | 'story_create'
   | 'universe_draft_create'
   | 'turn_generate'
-  | 'invite_create';
+  | 'invite_create'
+  | 'share_link_create';
 
 interface RateLimitPolicy {
   limit: number;
@@ -44,6 +45,7 @@ const POLICIES: Record<RateLimitedAction, RateLimitPolicy> = {
   universe_draft_create: { limit: 5, windowSeconds: 3600 },
   turn_generate: { limit: 30, windowSeconds: 3600 },
   invite_create: { limit: 20, windowSeconds: 3600 },
+  share_link_create: { limit: 20, windowSeconds: 3600 },
 };
 
 export class RateLimitExceededError extends Error {

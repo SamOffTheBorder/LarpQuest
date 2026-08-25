@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { callStructured, StructuredOutputError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import { nullBudgetGuard } from '@/lib/ai/spend';
+import { untrustedSections, withUntrustedPreamble } from '@/lib/ai/untrusted';
 import { nullUsageRecorder } from '@/lib/ai/usage';
 import { entitySchemaSchema, type EntitySchema } from '@/lib/engine/schema';
 import { resolveProgressionModel } from '@/lib/engine/progression-models';
@@ -96,21 +97,25 @@ function toUniverseVersion(row: UniverseVersionRow): UniverseVersion {
 const canonSummarySchema = z.object({ summary: z.string().min(1) });
 const canonRulesOnlySchema = z.object({ rules: z.array(z.string().min(1)) });
 
-const CANON_SUMMARY_SYSTEM_PROMPT = [
-  'You are compressing a fictional universe\'s canon bible into a concise',
-  'summary for use as prompt context. Preserve what a story generator would',
-  'need to stay consistent; drop exhaustive detail.',
-  '',
-  'Respond with JSON only, matching the required schema exactly.',
-].join('\n');
+const CANON_SUMMARY_SYSTEM_PROMPT = withUntrustedPreamble(
+  [
+    'You are compressing a fictional universe\'s canon bible into a concise',
+    'summary for use as prompt context. Preserve what a story generator would',
+    'need to stay consistent; drop exhaustive detail.',
+    '',
+    'Respond with JSON only, matching the required schema exactly.',
+  ].join('\n'),
+);
 
-const CANON_RULES_ONLY_SYSTEM_PROMPT = [
-  'You are extracting only the hard rules from a fictional universe\'s canon',
-  'bible — what is possible, impossible, or has a defined cost. Omit lore,',
-  'characters, and narrative detail entirely.',
-  '',
-  'Respond with JSON only, matching the required schema exactly.',
-].join('\n');
+const CANON_RULES_ONLY_SYSTEM_PROMPT = withUntrustedPreamble(
+  [
+    'You are extracting only the hard rules from a fictional universe\'s canon',
+    'bible — what is possible, impossible, or has a defined cost. Omit lore,',
+    'characters, and narrative detail entirely.',
+    '',
+    'Respond with JSON only, matching the required schema exactly.',
+  ].join('\n'),
+);
 
 /**
  * Generate both compressed canon-bible representations from whatever canon
@@ -129,7 +134,11 @@ async function compressCanonBible(
   }
 
   const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage, budget };
-  const canonText = JSON.stringify(canonBible, null, 2);
+  // The canon bible is research output derived from user-supplied source
+  // material, so it is untrusted at one remove.
+  const canonText = untrustedSections([
+    { heading: 'Canon bible', untrusted: JSON.stringify(canonBible, null, 2) },
+  ]);
 
   const [summaryResult, rulesOnlyResult] = await Promise.all([
     callStructured(deps, {

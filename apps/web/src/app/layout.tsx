@@ -12,6 +12,7 @@ import {
 } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { AppearanceProvider } from "@/components/appearance/appearance-provider";
+import { AppFooter } from "@/components/app-footer";
 import { AppHeader } from "@/components/app-header";
 import { parseAppearanceCookie, APPEARANCE_COOKIE_NAME } from "@/lib/appearance/cookie";
 import { DEFAULT_APPEARANCE } from "@/lib/appearance/types";
@@ -88,6 +89,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <AppearanceProvider initialPrefs={prefs}>
           <AppHeader />
           {children}
+          <AppFooter />
           <Toaster />
         </AppearanceProvider>
       </body>

@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -270,11 +270,14 @@ export type Database = {
       }
       chapters: {
         Row: {
+          continues_chapter_id: string | null
           created_at: string
           embedding: string | null
           entity_ids: string[]
           extracted_diffs: Json | null
           extraction_status: string
+          hidden_at: string | null
+          hidden_by: string | null
           id: string
           image_prompts: Json | null
           memory_status: string
@@ -290,11 +293,14 @@ export type Database = {
           validation_report: Json | null
         }
         Insert: {
+          continues_chapter_id?: string | null
           created_at?: string
           embedding?: string | null
           entity_ids?: string[]
           extracted_diffs?: Json | null
           extraction_status?: string
+          hidden_at?: string | null
+          hidden_by?: string | null
           id?: string
           image_prompts?: Json | null
           memory_status?: string
@@ -310,11 +316,14 @@ export type Database = {
           validation_report?: Json | null
         }
         Update: {
+          continues_chapter_id?: string | null
           created_at?: string
           embedding?: string | null
           entity_ids?: string[]
           extracted_diffs?: Json | null
           extraction_status?: string
+          hidden_at?: string | null
+          hidden_by?: string | null
           id?: string
           image_prompts?: Json | null
           memory_status?: string
@@ -330,6 +339,13 @@ export type Database = {
           validation_report?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "chapters_continues_chapter_id_fkey"
+            columns: ["continues_chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "chapters_story_id_fkey"
             columns: ["story_id"]
@@ -593,6 +609,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      legal_acceptances: {
+        Row: {
+          accepted_at: string
+          document: string
+          email: string
+          id: string
+          version: string
+        }
+        Insert: {
+          accepted_at?: string
+          document: string
+          email: string
+          id?: string
+          version: string
+        }
+        Update: {
+          accepted_at?: string
+          document?: string
+          email?: string
+          id?: string
+          version?: string
+        }
+        Relationships: []
       }
       memory_queue: {
         Row: {
@@ -988,6 +1028,9 @@ export type Database = {
           id: string
           reason: string
           reporter_id: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
           story_id: string
           submission_id: string | null
         }
@@ -997,6 +1040,9 @@ export type Database = {
           id?: string
           reason: string
           reporter_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
           story_id: string
           submission_id?: string | null
         }
@@ -1006,6 +1052,9 @@ export type Database = {
           id?: string
           reason?: string
           reporter_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
           story_id?: string
           submission_id?: string | null
         }
@@ -1129,6 +1178,7 @@ export type Database = {
       turns: {
         Row: {
           attempt_count: number
+          continues_chapter_id: string | null
           created_at: string
           deadline: string | null
           failure_reason: string | null
@@ -1145,6 +1195,7 @@ export type Database = {
         }
         Insert: {
           attempt_count?: number
+          continues_chapter_id?: string | null
           created_at?: string
           deadline?: string | null
           failure_reason?: string | null
@@ -1161,6 +1212,7 @@ export type Database = {
         }
         Update: {
           attempt_count?: number
+          continues_chapter_id?: string | null
           created_at?: string
           deadline?: string | null
           failure_reason?: string | null
@@ -1176,6 +1228,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "turns_continues_chapter_id_fkey"
+            columns: ["continues_chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "turns_story_id_fkey"
             columns: ["story_id"]
@@ -1529,6 +1588,32 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      continue_fight_turn: {
+        Args: { p_chapter_id: string; p_story_id: string }
+        Returns: {
+          attempt_count: number
+          continues_chapter_id: string | null
+          created_at: string
+          deadline: string | null
+          failure_reason: string | null
+          id: string
+          mode: string
+          moderation_reason: string | null
+          moderation_status: string | null
+          partial_prose: string | null
+          scene_setup: string | null
+          status: string
+          story_id: string
+          turn_number: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "turns"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_entity_with_history: {
         Args: {
           p_controlled_by?: string
@@ -1671,6 +1756,7 @@ export type Database = {
         Args: { p_mode?: string; p_scene_setup?: string; p_story_id: string }
         Returns: {
           attempt_count: number
+          continues_chapter_id: string | null
           created_at: string
           deadline: string | null
           failure_reason: string | null
@@ -1700,11 +1786,14 @@ export type Database = {
           p_validation_report?: Json
         }
         Returns: {
+          continues_chapter_id: string | null
           created_at: string
           embedding: string | null
           entity_ids: string[]
           extracted_diffs: Json | null
           extraction_status: string
+          hidden_at: string | null
+          hidden_by: string | null
           id: string
           image_prompts: Json | null
           memory_status: string

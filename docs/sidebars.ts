@@ -26,6 +26,7 @@ const sidebars: SidebarsConfig = {
         'architecture/spend-caps',
         'architecture/account-deletion',
         'architecture/rate-limiting',
+        'architecture/error-tracking',
       ],
     },
     {

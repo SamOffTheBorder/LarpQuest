@@ -62,6 +62,17 @@ describe('assertWithinRateLimit', () => {
     expect((error as InstanceType<typeof RateLimitExceededError>).retryAfterSeconds).toBe(42);
   });
 
+  it('has a policy for share_link_create', async () => {
+    state.response = { data: { allowed: true, current_count: 1, retry_after_seconds: 0 }, error: null };
+
+    const { assertWithinRateLimit } = await import('./rate-limit');
+    await assertWithinRateLimit('share_link_create', 'user-1');
+
+    expect(state.lastArgs).toMatchObject({ p_action: 'share_link_create', p_key: 'user-1' });
+    expect(state.lastArgs?.p_limit).toBeGreaterThan(0);
+    expect(state.lastArgs?.p_window_seconds).toBeGreaterThan(0);
+  });
+
   it('fails open — does not throw — when the database check itself errors', async () => {
     state.response = { data: null, error: { message: 'connection refused' } };
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});

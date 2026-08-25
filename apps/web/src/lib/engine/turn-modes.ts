@@ -12,17 +12,98 @@
  * change to the turn loop.
  */
 
+import { UNTRUSTED_CONTENT_PREAMBLE } from '@/lib/ai/untrusted';
+
+/**
+ * Turning-point marker (fight-chapter-split capability). Narration stays a
+ * streaming, plain-text call for every mode — there is no structured-output
+ * variant of narration in this codebase, and building one would cost every
+ * `action` turn its live streaming just to carry one boolean. Instead, an
+ * eligible turn's prompt asks the narrator to end its prose with this exact
+ * line when signaling a turning point rather than a resolution; the engine
+ * detects and strips it from the final streamed prose (turns.ts) before the
+ * chapter is validated or persisted, so it is never shown to a reader.
+ */
+export const TURNING_POINT_MARKER = '[TURNING_POINT]';
+
+/**
+ * Detect and strip the turning-point marker from streamed narration prose.
+ * Only recognizes the marker as the last non-empty line, exact and
+ * case-sensitive — deliberately narrow, so player-submitted content (fenced
+ * as untrusted input in the *prompt*, never in the model's *output*) cannot
+ * coincidentally trigger it, and a near-miss from the model simply fails to
+ * signal a turning point rather than being force-matched.
+ *
+ * `eligible: false` always strips the marker if present and never reports a
+ * turning point, regardless of what the model emitted — the eligibility
+ * check is enforced here in code, not left to the prompt alone.
+ */
+export function extractTurningPoint(prose: string, eligible: boolean): { prose: string; turningPoint: boolean } {
+  const lines = prose.split('\n');
+
+  let lastNonEmptyIndex = -1;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (lines[i]?.trim().length !== 0) {
+      lastNonEmptyIndex = i;
+      break;
+    }
+  }
+
+  if (lastNonEmptyIndex === -1 || lines[lastNonEmptyIndex]?.trim() !== TURNING_POINT_MARKER) {
+    return { prose, turningPoint: false };
+  }
+
+  const strippedLines = lines.slice(0, lastNonEmptyIndex);
+  while (strippedLines.length > 0 && strippedLines[strippedLines.length - 1]?.trim().length === 0) {
+    strippedLines.pop();
+  }
+
+  return { prose: strippedLines.join('\n'), turningPoint: eligible };
+}
+
+/**
+ * Whether a turn is eligible for the turning-point marker: exactly two
+ * distinct entities among its submissions, and the turn is not itself a
+ * continuation of an earlier fight-split chapter. A purely structural count
+ * — the engine never asks whether the two entities are actually fighting;
+ * that narrative judgment is left entirely to the prompt (only offered when
+ * eligible) and the model's own response.
+ */
+export function isTurningPointEligible(
+  submissionEntityIds: readonly (string | null)[],
+  continuesChapterId: string | null,
+): boolean {
+  if (continuesChapterId !== null) {
+    return false;
+  }
+
+  const distinctEntityIds = new Set(submissionEntityIds.filter((id): id is string => id !== null));
+  return distinctEntityIds.size === 2;
+}
+
 /** Story-level policy inputs a turn mode's prompt may fold in. Multiplayer,
  * Phase 5 — resolved through fixed lookups keyed by value, never a branch on
  * genre or universe identity. */
 export interface TurnModeStoryContext {
   contentRating: string;
   conflictPolicy: string;
+  /** Story-level pacing preference — how far the narrator should push plot
+   * progression each turn vs. holding on downtime, filler, and training
+   * beats. Fixed lookup keyed by value, same as contentRating/conflictPolicy;
+   * never a branch on genre or universe. */
+  pacing?: string;
   /** Gatekeeper rulings for this turn's proposals, pre-formatted as prose
    * lines. Empty when no submission this turn carried a proposal — see the
    * gatekeeper capability. Never a branch on genre or universe; this is
    * per-turn data, not a policy-value lookup like the other two fields. */
   gatekeeperRulings?: string[];
+  /** Whether this turn is eligible for the fight-chapter-split turning-point
+   * marker (fight-chapter-split capability): exactly two distinct entities
+   * among this turn's submissions, and the turn is not itself a
+   * continuation. Only `action` mode's prompt reads this; every other mode
+   * ignores it. Per-turn structural data computed by the caller, not a
+   * genre/universe judgment — the engine only counts submitting entities. */
+  turningPointEligible?: boolean;
 }
 
 export interface TurnMode {
@@ -59,14 +140,30 @@ const CONFLICT_POLICY_INSTRUCTIONS: Record<string, string> = {
 
 const DEFAULT_CONFLICT_POLICY_INSTRUCTION = CONFLICT_POLICY_INSTRUCTIONS.narrative_priority;
 
+/** Fixed lookup, keyed by `turn_config.pacing` value. How far each turn
+ * should push the story forward versus holding on downtime, filler, and
+ * training/practice beats between major plot progression. */
+const PACING_INSTRUCTIONS: Record<string, string> = {
+  tight:
+    'Keep the plot moving. Advance the main throughline this turn rather than lingering — save downtime and filler beats for moments that have earned them.',
+  normal:
+    'Balance plot progression with downtime. Not every turn needs to advance the main throughline — character moments, training, and filler beats are welcome between pushes forward, but do not let the story stall indefinitely.',
+  expansive:
+    'Favor downtime, filler, and training/practice beats over rushing the plot. Let characters breathe, develop skills, and interact before the main throughline advances again. Slow pacing is the goal here, not a fallback.',
+};
+
+const DEFAULT_PACING_INSTRUCTION = PACING_INSTRUCTIONS.normal;
+
 /** Shared by every mode's systemPrompt: content-rating/conflict-policy
  * instructions plus, when present, the Gatekeeper rulings section. Mode
  * prompts differ only in the lines that precede this common tail. */
 function policyAndRulingLines(story: TurnModeStoryContext): string[] {
   const contentInstruction = CONTENT_RATING_INSTRUCTIONS[story.contentRating] ?? DEFAULT_CONTENT_RATING_INSTRUCTION;
   const conflictInstruction = CONFLICT_POLICY_INSTRUCTIONS[story.conflictPolicy] ?? DEFAULT_CONFLICT_POLICY_INSTRUCTION;
+  const pacingInstruction =
+    story.pacing !== undefined ? (PACING_INSTRUCTIONS[story.pacing] ?? DEFAULT_PACING_INSTRUCTION) : DEFAULT_PACING_INSTRUCTION;
 
-  const lines = [`- ${contentInstruction}`, `- ${conflictInstruction}`];
+  const lines = [`- ${contentInstruction}`, `- ${conflictInstruction}`, `- ${pacingInstruction}`];
 
   if (story.gatekeeperRulings !== undefined && story.gatekeeperRulings.length > 0) {
     lines.push(
@@ -81,6 +178,12 @@ function policyAndRulingLines(story: TurnModeStoryContext): string[] {
       ...story.gatekeeperRulings,
     );
   }
+
+  // Appended here rather than in each mode's own prompt: every mode's user
+  // prompt carries fenced player content, and six per-mode copies would be six
+  // chances for the wording to drift. The tail is identical for every mode, so
+  // this adds no conditional on mode, genre, universe, or media type.
+  lines.push('', UNTRUSTED_CONTENT_PREAMBLE);
 
   return lines;
 }
@@ -121,6 +224,25 @@ function actionSystemPrompt(story: TurnModeStoryContext): string {
     '- Never contradict established state, capabilities, or the world ledger.',
     '- Write prose, not a summary or a list of outcomes.',
     '- Do not resolve anything that belongs to a player not in this turn.',
+    '- When the action is a fight, write it as an intense, jaw-dropping,',
+    '  thrilling set piece — specific, sensory, moment-to-moment detail on',
+    '  the exchange itself, not a brief summary of who won. Keep every blow,',
+    '  movement, and consequence within what the combatants\' established',
+    '  capabilities, gear, and the world ledger make physically plausible;',
+    '  intensity comes from the writing, not from exceeding what a character',
+    '  could actually do.',
+    ...(story.turningPointEligible === true
+      ? [
+          '- This is a one-on-one fight between two combatants. If, in your',
+          '  judgment, the exchange has reached a dramatic turning point — a',
+          '  decisive hit, a shift in momentum, a moment that demands a',
+          '  cliffhanger — rather than the fight\'s actual resolution, end your',
+          `  response with the exact line \`${TURNING_POINT_MARKER}\` on its own,`,
+          '  after the prose, and nothing after it. Only do this when the fight',
+          '  is genuinely unresolved; if the fight concludes this turn, resolve',
+          `  it fully and do not include \`${TURNING_POINT_MARKER}\`.`,
+        ]
+      : []),
     ...policyAndRulingLines(story),
   ];
 
@@ -297,4 +419,24 @@ export function readActiveMode(turnConfig: unknown): string {
 
   const value = (turnConfig as Record<string, unknown>).active_mode;
   return typeof value === 'string' && value.length > 0 ? value : DEFAULT_TURN_MODE;
+}
+
+export const DEFAULT_PACING = 'normal';
+
+export function registeredPacingValues(): readonly string[] {
+  return Object.keys(PACING_INSTRUCTIONS);
+}
+
+/**
+ * A story's pacing preference, per `turn_config.pacing`. Falls back to
+ * `DEFAULT_PACING` for a story that has never set it, or whose `turn_config`
+ * predates this key — same read pattern as `readActiveMode`.
+ */
+export function readPacing(turnConfig: unknown): string {
+  if (turnConfig === null || typeof turnConfig !== 'object') {
+    return DEFAULT_PACING;
+  }
+
+  const value = (turnConfig as Record<string, unknown>).pacing;
+  return typeof value === 'string' && value.length > 0 ? value : DEFAULT_PACING;
 }

@@ -7,7 +7,7 @@ Token-based public read-only access to a story's published chapters for an unaut
 ## Requirements
 
 ### Requirement: Share link creation
-An `owner` or `gm` SHALL be able to create a token-bearing public share link for a story, granting read-only access to that story's published chapters to anyone with the link, without requiring the visitor to authenticate.
+An `owner` or `gm` SHALL be able to create a token-bearing public share link for a story, granting read-only access to that story's published chapters to anyone with the link, without requiring the visitor to authenticate. Share link creation SHALL be rate-limited per user, matching the same discipline applied to every other request-scoped action in this deployment.
 
 #### Scenario: Owner creates a share link
 - **WHEN** an owner or GM creates a share link for a story
@@ -16,6 +16,10 @@ An `owner` or `gm` SHALL be able to create a token-bearing public share link for
 #### Scenario: Non-GM cannot create a share link
 - **WHEN** a player or spectator attempts to create a share link
 - **THEN** the system SHALL reject the request
+
+#### Scenario: Rate limit exceeded
+- **WHEN** an owner or GM creates share links beyond the configured rate limit within its window
+- **THEN** the system SHALL reject the request until the window resets
 
 ### Requirement: Share link read-only scope
 A visitor using a valid share link SHALL be able to view a story's published chapters and, where present, their generated images and videos, and MUST NOT be able to view entity sheets, submit turns, or mutate any story state.

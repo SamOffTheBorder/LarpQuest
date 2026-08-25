@@ -93,7 +93,7 @@ vi.mock('@/lib/supabase/server', () => {
   return { createServiceRoleClient: () => ({ from }) };
 });
 
-const { switchTurnMode, listModeChanges } = await import('@/lib/engine/mode-switching');
+const { switchTurnMode, listModeChanges, setPacing } = await import('@/lib/engine/mode-switching');
 
 const STORY = 'story-1';
 const OWNER = 'owner-1';
@@ -156,6 +156,42 @@ describe('switchTurnMode', () => {
     await switchTurnMode(STORY, OWNER, 'scene');
 
     expect(state.stories.get(STORY)?.turn_config).toMatchObject({ absent_policy: 'skip' });
+  });
+});
+
+describe('setPacing', () => {
+  it('owner can set pacing and turn_config.pacing is updated', async () => {
+    await setPacing(STORY, OWNER, 'expansive');
+
+    expect(state.stories.get(STORY)?.turn_config).toEqual({ absent_policy: 'skip', pacing: 'expansive' });
+  });
+
+  it('gm can set pacing', async () => {
+    await expect(setPacing(STORY, GM, 'tight')).resolves.toBeUndefined();
+    expect(state.stories.get(STORY)?.turn_config).toMatchObject({ pacing: 'tight' });
+  });
+
+  it('player is rejected and nothing is written', async () => {
+    await expect(setPacing(STORY, PLAYER, 'tight')).rejects.toThrow();
+
+    expect(state.stories.get(STORY)?.turn_config).toEqual({ absent_policy: 'skip' });
+  });
+
+  it('an unregistered pacing value is rejected before writing', async () => {
+    await expect(setPacing(STORY, OWNER, 'breakneck')).rejects.toThrow(/Unknown pacing/);
+
+    expect(state.stories.get(STORY)?.turn_config).toEqual({ absent_policy: 'skip' });
+  });
+
+  it('preserves unrelated turn_config keys, including active_mode', async () => {
+    await switchTurnMode(STORY, OWNER, 'action');
+    await setPacing(STORY, OWNER, 'tight');
+
+    expect(state.stories.get(STORY)?.turn_config).toEqual({
+      absent_policy: 'skip',
+      active_mode: 'action',
+      pacing: 'tight',
+    });
   });
 });
 

@@ -15,6 +15,8 @@
  * regression guard).
  */
 
+import { untrustedSections, type NonceSource } from '@/lib/ai/untrusted';
+
 /** Entity `data` is opaque. The engine never inspects field names. */
 export type EntityData = Record<string, unknown>;
 
@@ -79,6 +81,20 @@ export interface AssembleContextInput {
   retrievedSummaries?: readonly ContextRetrievedSummary[];
   submissions: readonly ContextSubmission[];
   policy?: ContextPolicy;
+  /**
+   * Nonce for the untrusted-content fences around every user-authored section
+   * of the prompt (see `lib/ai/untrusted.ts`).
+   *
+   * It is an *input* rather than something this function generates, because
+   * `assembleContext` is a pure function of its inputs and must stay one — a
+   * `crypto.getRandomValues` call inside would make the same inputs produce
+   * different prompts. The turn loop passes a fresh nonce per generation, which
+   * is the granularity that matters: what must be unpredictable is the fence
+   * around a given call's content, not the fence between two assemblies of
+   * identical input. Omitted (in tests and callers that only inspect
+   * structure) it falls back to a fixed placeholder.
+   */
+  fenceNonce?: string;
 }
 
 export interface ContextPolicy {
@@ -165,41 +181,50 @@ function renderRetrievedSummary(entry: ContextRetrievedSummary): string {
  */
 export function assembleContext(input: AssembleContextInput): AssembledContext {
   const policy = input.policy ?? DEFAULT_CONTEXT_POLICY;
+  // A stable placeholder when the caller supplies none; the turn loop passes
+  // a fresh one per generation.
+  const nonce = input.fenceNonce ?? 'static-context-fence';
+  const fence: NonceSource = () => nonce;
   const { story, turn, entities, submissions } = input;
 
   const activeEntities = entities.filter((entity) => entity.status === 'active');
 
   // --- Required sections, in prompt order ---
-  const header = `# Story: ${story.title}`;
+  const header = untrustedSections([{ heading: 'Story', untrusted: story.title }], fence);
 
   const tone =
     story.toneDirectives !== null && story.toneDirectives.length > 0
-      ? `## Tone\n${story.toneDirectives}\n\nMaintain this register.`
+      ? `${untrustedSections([{ heading: 'Tone', untrusted: story.toneDirectives }], fence)}\n\nMaintain this register.`
       : null;
 
   const canonSection =
     story.canonBibleText !== undefined && story.canonBibleText !== null && story.canonBibleText.length > 0
-      ? `## Canon Bible\n${story.canonBibleText}`
+      ? untrustedSections([{ heading: 'Canon Bible', untrusted: story.canonBibleText }], fence)
       : null;
 
   const entitySection =
     activeEntities.length > 0
-      ? `## Current State\n${activeEntities.map(renderEntity).join('\n\n')}`
+      ? untrustedSections([
+          { heading: 'Current State', untrusted: activeEntities.map(renderEntity).join('\n\n') },
+        ], fence)
       : '## Current State\n(no active entities)';
 
-  const ledgerSection = `## World Ledger\n${JSON.stringify(story.worldLedger, null, 2)}`;
+  const ledgerSection = untrustedSections([
+    { heading: 'World Ledger', untrusted: JSON.stringify(story.worldLedger, null, 2) },
+  ], fence);
 
   const turnSection = [
     '## This Turn',
     `Mode: ${turn.mode}`,
     turn.sceneSetup !== null && turn.sceneSetup.length > 0
-      ? `Scene: ${turn.sceneSetup}`
+      ? untrustedSections([{ heading: 'Scene', untrusted: turn.sceneSetup }], fence)
       : null,
     '',
-    'Player actions:',
     submissions.length > 0
-      ? submissions.map(renderSubmission).join('\n')
-      : '(none submitted)',
+      ? untrustedSections([
+          { heading: 'Player actions', untrusted: submissions.map(renderSubmission).join('\n') },
+        ], fence)
+      : 'Player actions:\n(none submitted)',
   ]
     .filter((part): part is string => part !== null)
     .join('\n');
@@ -250,7 +275,11 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
   const droppedChapters = candidates.length - kept.length;
 
   const recentSection =
-    kept.length > 0 ? `## Recent Events\n${kept.map(renderChapter).join('\n\n')}` : null;
+    kept.length > 0
+      ? untrustedSections([
+          { heading: 'Recent Events', untrusted: kept.map(renderChapter).join('\n\n') },
+        ], fence)
+      : null;
 
   // --- Optional: retrieved summaries, lower priority than recent full-prose
   // chapters (Part 6.2's ALWAYS > RECENT > RETRIEVED). Excludes any chapter
@@ -275,7 +304,12 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
 
   const retrievedSection =
     retrievedKept.length > 0
-      ? `## Relevant History\n${retrievedKept.map(renderRetrievedSummary).join('\n\n')}`
+      ? untrustedSections([
+          {
+            heading: 'Relevant History',
+            untrusted: retrievedKept.map(renderRetrievedSummary).join('\n\n'),
+          },
+        ], fence)
       : null;
 
   // Recent events and retrieved history sit between world state and the

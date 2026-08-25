@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
 
 import { signInAction, type SignInState } from '@/app/sign-in/actions';
@@ -48,6 +49,24 @@ export function SignInForm() {
             required
             aria-invalid={state.status === 'error'}
           />
+          <label className="flex items-start gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" name="agreeToLegal" required className="mt-0.5" />
+            <span>
+              I agree to the{' '}
+              <Link href="/terms" target="_blank" className="underline">
+                Terms of Service
+              </Link>
+              ,{' '}
+              <Link href="/privacy" target="_blank" className="underline">
+                Privacy Policy
+              </Link>
+              , and{' '}
+              <Link href="/acceptable-use" target="_blank" className="underline">
+                Acceptable Use Policy
+              </Link>
+              .
+            </span>
+          </label>
           {state.status === 'error' && (
             <p className="text-sm text-destructive">{state.message}</p>
           )}

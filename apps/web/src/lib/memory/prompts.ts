@@ -1,3 +1,4 @@
+import { untrustedSections, withUntrustedPreamble } from '@/lib/ai/untrusted';
 import type { RetrievalBias } from '@/lib/memory/schemas';
 
 /**
@@ -40,13 +41,15 @@ export interface SummaryEntityInput {
   type: string;
 }
 
-export const CHAPTER_SUMMARY_SYSTEM_PROMPT = [
-  'You are summarizing one chapter of a collaborative fiction story for use as',
-  'retrievable context in later chapters. Report what happened, who was',
-  'involved, and what changed — concretely, not as vague scene-setting.',
-  '',
-  'Respond with JSON only, matching the required schema exactly.',
-].join('\n');
+export const CHAPTER_SUMMARY_SYSTEM_PROMPT = withUntrustedPreamble(
+  [
+    'You are summarizing one chapter of a collaborative fiction story for use as',
+    'retrievable context in later chapters. Report what happened, who was',
+    'involved, and what changed — concretely, not as vague scene-setting.',
+    '',
+    'Respond with JSON only, matching the required schema exactly.',
+  ].join('\n'),
+);
 
 export function buildChapterSummaryPrompt(
   chapter: SummaryChapterInput,
@@ -59,25 +62,26 @@ export function buildChapterSummaryPrompt(
       : '(no entities recorded for this story)';
 
   return [
-    `Chapter ${chapter.turnNumber}:`,
-    chapter.prose,
-    '',
-    'Known entities in this story:',
-    entityList,
+    untrustedSections([
+      { heading: `Chapter ${chapter.turnNumber}`, untrusted: chapter.prose },
+      { heading: 'Known entities in this story', untrusted: entityList },
+    ]),
     '',
     BIAS_INSTRUCTIONS[bias],
   ].join('\n');
 }
 
-export const ARC_SUMMARY_SYSTEM_PROMPT = [
-  'You are summarizing a multi-chapter arc of a collaborative fiction story,',
-  'from its per-chapter summaries, for use as long-range retrievable context.',
-  'Compress the arc into what a reader would need to know without having read',
-  'the individual chapters: the throughline, what changed by the end, and any',
-  'unresolved threads.',
-  '',
-  'Respond with JSON only, matching the required schema exactly.',
-].join('\n');
+export const ARC_SUMMARY_SYSTEM_PROMPT = withUntrustedPreamble(
+  [
+    'You are summarizing a multi-chapter arc of a collaborative fiction story,',
+    'from its per-chapter summaries, for use as long-range retrievable context.',
+    'Compress the arc into what a reader would need to know without having read',
+    'the individual chapters: the throughline, what changed by the end, and any',
+    'unresolved threads.',
+    '',
+    'Respond with JSON only, matching the required schema exactly.',
+  ].join('\n'),
+);
 
 export interface ArcChapterSummaryInput {
   turnNumber: number;
@@ -88,9 +92,12 @@ export function buildArcSummaryPrompt(
   chapterSummaries: readonly ArcChapterSummaryInput[],
   bias: RetrievalBias,
 ): string {
-  const body = chapterSummaries
-    .map((chapter) => `Chapter ${chapter.turnNumber}: ${chapter.summary}`)
-    .join('\n');
+  const body = untrustedSections(
+    chapterSummaries.map((chapter) => ({
+      heading: `Chapter ${chapter.turnNumber}`,
+      untrusted: chapter.summary,
+    })),
+  );
 
   return [body, '', BIAS_INSTRUCTIONS[bias]].join('\n');
 }

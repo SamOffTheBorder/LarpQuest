@@ -60,6 +60,7 @@ async function readExportableChapters(storyId: string): Promise<{ title: string;
       .select('turn_number, prose, rolled_back_at')
       .eq('story_id', storyId)
       .is('rolled_back_at', null)
+      .is('hidden_at', null)
       .order('turn_number', { ascending: true }),
   ]);
 

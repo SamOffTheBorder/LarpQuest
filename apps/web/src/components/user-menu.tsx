@@ -7,7 +7,7 @@ import { SettingsIcon, LogOutIcon, ChevronDownIcon, WalletIcon, UserIcon } from 
 import { signOutAction } from '@/lib/auth-actions';
 import { cn } from '@/lib/utils';
 
-export function UserMenu({ email }: { email: string }) {
+export function UserMenu({ displayName }: { displayName: string }) {
   return (
     <MenuPrimitive.Root>
       <MenuPrimitive.Trigger
@@ -16,7 +16,7 @@ export function UserMenu({ email }: { email: string }) {
           'hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none',
         )}
       >
-        <span className="max-w-40 truncate">{email}</span>
+        <span className="max-w-40 truncate">{displayName}</span>
         <ChevronDownIcon className="size-3.5 text-muted-foreground" />
       </MenuPrimitive.Trigger>
       <MenuPrimitive.Portal>

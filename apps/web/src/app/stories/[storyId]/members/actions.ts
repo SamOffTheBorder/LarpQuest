@@ -7,6 +7,7 @@ import { createInvite, inviteRoleSchema, joinViaInvite, revokeInvite } from '@/l
 import { assertWithinRateLimit, RateLimitExceededError } from '@/lib/rate-limit';
 import { leaveStory, removeMember } from '@/lib/engine/membership';
 import { transferStoryOwnership } from '@/lib/engine/ownership-transfer';
+import { createShareLink, revokeShareLink } from '@/lib/engine/share-links';
 
 export type MemberActionState = {
   status: 'idle' | 'error';
@@ -115,6 +116,33 @@ export async function transferOwnershipAction(storyId: string, newOwnerId: strin
 
   try {
     await transferStoryOwnership(storyId, newOwnerId);
+  } catch (error) {
+    return { status: 'error', message: errorMessage(error) };
+  }
+
+  revalidatePath(`/stories/${storyId}/members`);
+  return initialIdle;
+}
+
+export async function createShareLinkAction(storyId: string): Promise<MemberActionState> {
+  const user = await requireUser();
+
+  try {
+    await assertWithinRateLimit('share_link_create', user.id);
+    await createShareLink(storyId, user.id);
+  } catch (error) {
+    return { status: 'error', message: errorMessage(error) };
+  }
+
+  revalidatePath(`/stories/${storyId}/members`);
+  return initialIdle;
+}
+
+export async function revokeShareLinkAction(storyId: string, shareLinkId: string): Promise<MemberActionState> {
+  const user = await requireUser();
+
+  try {
+    await revokeShareLink(shareLinkId, user.id);
   } catch (error) {
     return { status: 'error', message: errorMessage(error) };
   }

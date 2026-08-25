@@ -626,3 +626,137 @@ existing auth-redirect behavior on `/sign-in` and `/stories` unaffected) —
 no browser-automation tool was available in this environment for an actual
 visual/screenshot check. `127.0.0.1`, not `localhost`, is required to reach
 the Next dev server here; something else is bound to `[::1]:3000`.
+
+### 2026-08-22 (cont.) — `sentry-error-tracking`
+
+**A3.2 Error tracking.** `@sentry/nextjs` wired via the standard App Router
+convention: `instrumentation.ts` (server + edge, plus `onRequestError`),
+`instrumentation-client.ts` (browser), and `next.config.ts` wrapped with
+`withSentryConfig`. All three existing error boundaries (`error.tsx`,
+`global-error.tsx`, `stories/[storyId]/error.tsx`) now call
+`Sentry.captureException` before rendering their unchanged digest-only
+fallback. `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` are optional — unset,
+Sentry no-ops rather than failing, verified by a clean `npm test`, `npm run
+typecheck`, and `npm run build` with no DSN configured. Documented at
+`docs/docs/architecture/error-tracking.md`.
+
+*Still open:* no Sentry project/DSN has actually been provisioned — that is
+an external step for the user, matching every other "cannot be done from
+this repo alone" item in this document. Performance tracing and session
+replay are deliberately out of scope.
+
+### 2026-08-22 (cont.) — `moderation-report-queue`
+
+**B2.3 Report queue (partial).** `story_reports` and `listReports()` already
+existed and were already surfaced read-only on the Members page before this
+change — narrower than the audit assumed. What was actually missing and is
+now built: an owner/GM can mark a report `resolved` (new `status`/
+`resolved_by`/`resolved_at` columns, guarded by a trigger so only those
+fields can change — the original reason/reporter/target stay permanently
+intact) and can hide a reported chapter from non-manager members (`chapters.
+hidden_at`/`hidden_by`, filtered in `listChapters`, story export, share
+links, and `search_story`). Hiding is display-only: `entity_history`,
+extracted diffs, and validation reports derived from a hidden chapter are
+untouched. Scoped deliberately to per-story moderation, exercised by the
+existing owner/GM roles — this codebase has no platform-wide admin concept,
+and one was judged out of scope for this change (see its proposal's
+non-goals).
+
+*Still open:* no cross-story/platform admin surface, no account-level
+suspension that blocks sign-in (existing per-story `removeMember` already
+covers per-story ejection). `supabase/tests/rls_coverage.sql` fails on its
+first check due to a **pre-existing, unrelated** gap: `rate_limit_counters`
+(from the already-archived `rate-limiting` change) has RLS enabled with no
+policy at all — intentional deny-all-except-service-role in effect, but it
+trips the coverage script's blanket check. Not fixed here since it predates
+and is unrelated to this change; worth a one-line follow-up (either an
+explicit service-role-only policy, or excluding intentionally-service-role-
+only tables from the script's check) so the coverage script is usable again
+without a workaround.
+
+### 2026-08-22 (cont.) — `account-data-export`
+
+**C1.2 Account data export.** `lib/engine/account-export.ts`'s `requestAccountExport` bundles a
+user's profile, appearance preferences, story memberships (story/role/joined date only — not
+other members or story prose), their own submissions, reports they filed, usage/spend history,
+and API key metadata (never the encrypted key ciphertext) into one JSON file, downloadable from
+`/settings/account/export` (linked from the existing `/settings/account` page). Synchronous, not
+job/storage-backed like story export's PDF/EPUB rendering — the data volume here doesn't need
+that. Draws the same "user data vs. story content" boundary account deletion already established:
+a story member's export never includes another member's identity or the story's prose.
+
+*Still open:* no UI nudge to export before deleting (a reasonable follow-up, deliberately out of
+scope here); no pagination for accounts with very large history, judged a non-issue at this
+deployment's actual scale.
+
+### 2026-08-22 (cont.) — `share-link-rate-limit`
+
+**B3.1 Rate limiting (fully closed).** The last gap the `rate-limiting` change's own notes named —
+`createShareLink` had no rate limit because it had no live UI entry point — is closed. Added a
+`share_link_create` policy (20/hour, matching `invite_create`) to `lib/rate-limit.ts`, and built
+the missing UI: a "Share links" section on the Members page (owner/GM only) with create, copy, and
+revoke, backed by a new `listShareLinks` read function. All five actions named in the original
+rate-limiting audit are now both rate-limited and reachable.
+
+### 2026-08-22 (cont.) — `legal-pages`
+
+**B1.4 Legal documents served in-app, acceptance recorded (plumbing only).** `/terms`, `/privacy`,
+`/acceptable-use` now render `legal/*.md` directly (via `marked`), read from disk at request time
+so editing a draft is the only step to update the live page — no content duplicated into the app.
+A footer with links to all three is now on every page. Fixed a real bug found in the process: the
+drafts cross-link each other with relative Markdown paths (`./PRIVACY_POLICY.md`) that don't
+resolve as in-app routes — `lib/legal.ts` rewrites them post-render without touching the source
+files, which stay portable/readable outside the app (e.g. on GitHub).
+
+Because sign-in is passwordless (`signInWithOtp` creates the account invisibly, server-side, the
+first time an address is used — there is no distinct "signup" step this codebase can detect before
+that), acceptance is recorded on **every** sign-in attempt, not just the first, gated by a required
+checkbox on the sign-in form. Recorded rows (`legal_acceptances`, new migration) are keyed by
+**email, not `user_id`** — no session or account exists at the moment the checkbox is checked, and
+backfilling a `user_id` later was judged unnecessary complexity for a linkage nothing in the app
+reads back (see the archived change's design.md for the full reasoning). Document "version" is a
+sha256 hash of each file's own content, not the drafts' own `Last updated: [DATE]` header, which is
+still an unresolved bracket — a content hash needs nothing filled in and changes automatically the
+moment a draft's text changes.
+
+*Still open, deliberately deferred:* every `[BRACKETED]` field and `DECISION` note in the three
+drafts (age floor, legal entity, jurisdiction, billing model, deletion semantics, training-on-
+content) — these are business/personal decisions only the user can make, explicitly out of scope
+for this change. Also still open: lawyer review (B1.2), DMCA agent registration (B1.3), CSAM
+procedure (B2.1) — all separate LAUNCH_PLAN items. No retroactive acceptance record exists for
+accounts created before this shipped; only future sign-ins are gated.
+
+### 2026-08-23 — `prompt-injection-defense`
+
+**B3.4 Prompt-injection defense.** The Acceptable Use Policy already promised users that their
+content is treated as data, not instructions. It was not: all thirteen call sites interpolated
+untrusted text straight into the user prompt as `` `## Heading\n${content}` ``, with nothing marking
+where attacker-authored text ended.
+
+Now a single helper (`lib/ai/untrusted.ts`) fences untrusted content in a delimiter carrying a
+per-call random nonce, neutralises the nonce inside the content so it cannot close its own fence,
+and supplies one standing system-prompt clause stating that fenced content is data and only the
+system prompt carries authority. Every call site routes through it; none formats untrusted text
+itself, for the same reason model resolution and spend caps live in the gateway. The mechanism is
+structural, never lexical — no blocklist of phrases, so it stays compatible with the rule that
+engine code never branches on genre, universe, or media type.
+
+Both surfaces the item names are covered. The **moderator** additionally treats an attempt to
+influence its verdict as itself grounds to `flag`, which makes a successful injection produce the
+outcome (GM review) the attacker was trying to avoid. **Uploaded research source material** is
+fenced in every stage prompt, as is each stage's upstream output, since that output is derived from
+the same untrusted input. The **gatekeeper** got the same adversarial treatment as the moderator —
+it also rules on text the requesting player wrote. An audit turned up one site not in the original
+plan: the gateway's structured-output **retry** was feeding the rejected response back unfenced.
+
+Two things worth recording. First, this raises the cost of injection; it does not prevent it, and
+nothing prompt-level does. The hard bound remains Zod parsing of every structured output
+(CLAUDE.md #7) — a model talked into misbehaving still cannot emit a verdict outside its enum.
+Second, three `context.test.ts` determinism tests failed correctly and changed the design: a random
+nonce inside `assembleContext` would have broken its documented purity, so the nonce became an
+input (`fenceNonce`), with the turn loop passing a fresh one per generation.
+
+539 tests pass (+18), typecheck and build clean.
+
+*Still open:* B3.5 (security review, RLS/advisor checks against the linked project) is the
+remaining Part 6 item before Tier B.

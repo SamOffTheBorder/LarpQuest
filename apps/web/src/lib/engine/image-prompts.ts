@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { callStructured, StructuredOutputError } from '@/lib/ai/gateway';
 import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
+import { untrustedSections, withUntrustedPreamble } from '@/lib/ai/untrusted';
 import { queueChapterIllustration } from '@/lib/engine/chapter-illustration';
 import { serverEnv } from '@/lib/env';
 import { createServiceRoleClient } from '@/lib/supabase/server';
@@ -25,27 +26,51 @@ import { toJson } from '@/lib/supabase/json';
  * one with none go through the identical code path.
  */
 
-export const IMAGE_PROMPT_SYSTEM_PROMPT = [
-  'You write image-generation prompts for a manga-style illustrator, based on',
-  'a chapter of a story.',
-  '',
-  'You will be given the chapter text and the entities it involves. Identify',
-  "the chapter's single most visually striking moment — or, if the chapter",
-  'clearly spans more than one distinct scene worth illustrating, up to three',
-  '— and write one concrete, visual image-generation prompt per moment.',
-  '',
-  'Rules:',
-  '- Describe only what is visually present: setting, characters, action,',
-  '  mood, lighting. Do not describe abstract plot or internal thoughts.',
-  '- Use the entity names and descriptions you were given so a character',
-  "  reads consistently across chapters — but never invent a universe's",
-  '  vocabulary; describe only what this specific story already established.',
-  '- Each prompt should stand alone: a reader with no other context should be',
-  '  able to picture the scene from the prompt text.',
-  '- Produce between 1 and 3 prompts.',
-  '',
-  'Respond with JSON only: {"prompts": ["...", ...]}',
-].join('\n');
+export const IMAGE_PROMPT_SYSTEM_PROMPT = withUntrustedPreamble(
+  [
+    'You write image-generation prompts for a manga-style illustrator, based on',
+    'a chapter of a story.',
+    '',
+    'You will be given the chapter text and the entities it involves. Identify',
+    "the chapter's single most visually striking moment — or, if the chapter",
+    'clearly spans more than one distinct scene worth illustrating, up to three',
+    '— and write one concrete, visual image-generation prompt per moment.',
+    '',
+    'Rules:',
+    '- Describe only what is visually present: setting, characters, action,',
+    '  mood, lighting. Do not describe abstract plot or internal thoughts.',
+    '- Use the entity names and descriptions you were given so a character',
+    "  reads consistently across chapters — but never invent a universe's",
+    '  vocabulary; describe only what this specific story already established.',
+    '- For every character who appears in the illustrated moment, carry over',
+    '  every physical trait recorded for them in the entity data — build,',
+    '  race or species, hair type and color, and any other established',
+    '  physical descriptor — so the same character keeps the same appearance',
+    '  from one illustration to the next. Only include a trait that is',
+    "  actually present in that character's entity data; never invent one.",
+    '- Also carry over the character\'s established identity — name, role or',
+    '  title, and any known-vs-secret/masked identity status — and depict',
+    '  whichever gear, equipment, or clothing the entity data or the chapter',
+    '  text establishes them as having on them at this point in the story.',
+    '  If the entity data or chapter text indicates they are without their',
+    '  usual gear (disarmed, unequipped, in plain clothes, etc.), depict them',
+    '  that way instead — do not default to fully geared when the story says',
+    '  otherwise.',
+    '- When the chapter contains a fight, the illustrated moment may be drawn',
+    '  from the middle of the exchange, not only its start or aftermath — a',
+    '  clash of attacks, a dodge, a hit landing — whichever moment is most',
+    '  visually striking. Depict the combat itself with anatomically and',
+    '  physically plausible action: bodies, weapons, and impacts should stay',
+    '  within what the established physical traits, gear, and setting could',
+    "  actually do. Do not depict impossible poses, injuries beyond what the",
+    '  chapter text describes, or physics-defying action.',
+    '- Each prompt should stand alone: a reader with no other context should be',
+    '  able to picture the scene from the prompt text.',
+    '- Produce between 1 and 3 prompts.',
+    '',
+    'Respond with JSON only: {"prompts": ["...", ...]}',
+  ].join('\n'),
+);
 
 export interface ImagePromptEntityContext {
   id: string;
@@ -74,8 +99,10 @@ export function buildImagePromptUserPrompt(args: BuildImagePromptArgs): string {
     args.entities.length > 0 ? args.entities.map(renderEntity).join('\n') : '(no entities in this story yet)';
 
   return [
-    `## Chapter\n${args.chapterProse}`,
-    `## Entities\n${entitySection}`,
+    untrustedSections([
+      { heading: 'Chapter', untrusted: args.chapterProse },
+      { heading: 'Entities', untrusted: entitySection },
+    ]),
     'Write image-generation prompts for this chapter.',
   ].join('\n\n');
 }

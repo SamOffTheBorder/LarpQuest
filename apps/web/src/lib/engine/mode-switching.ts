@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { assertMember, requireRole } from '@/lib/engine/membership';
-import { resolveTurnMode } from '@/lib/engine/turn-modes';
+import { registeredPacingValues, resolveTurnMode } from '@/lib/engine/turn-modes';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
@@ -99,6 +99,45 @@ export async function switchTurnMode(
   }
 
   return toModeChangeRecord(data);
+}
+
+/**
+ * Set a story's pacing preference (`turn_config.pacing`). Owner/GM only,
+ * same authorization as switchTurnMode. No dedicated audit table — pacing is
+ * a narrator-prompt styling knob, not a structural mode change, so it does
+ * not warrant `turn_mode_changes`' history trail. Takes effect starting with
+ * the next turn generated, since `generateTurn` reads it fresh each call.
+ */
+export async function setPacing(storyId: string, userId: string, pacing: string): Promise<void> {
+  await requireRole(storyId, userId, ['owner', 'gm']);
+
+  const registered = registeredPacingValues();
+  if (!registered.includes(pacing)) {
+    throw new Error(`Unknown pacing "${pacing}". Registered values: ${registered.join(', ')}.`);
+  }
+
+  const supabase = createServiceRoleClient();
+
+  const { data: story, error: storyError } = await supabase
+    .from('stories')
+    .select('turn_config')
+    .eq('id', storyId)
+    .single();
+
+  if (storyError !== null) {
+    throw new Error(`Failed to read story turn_config: ${storyError.message}`);
+  }
+
+  const turnConfig = (story.turn_config ?? {}) as Record<string, unknown>;
+
+  const { error: updateError } = await supabase
+    .from('stories')
+    .update({ turn_config: { ...turnConfig, pacing } })
+    .eq('id', storyId);
+
+  if (updateError !== null) {
+    throw new Error(`Failed to update story turn_config: ${updateError.message}`);
+  }
 }
 
 /** History of a story's mode switches, most recent first. Membership is

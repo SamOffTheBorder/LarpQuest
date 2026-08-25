@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { assertMember, isOwner } from '@/lib/engine/membership';
+import { assertMember, isOwner, listMembers, requireRole } from '@/lib/engine/membership';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 export interface Chapter {
@@ -11,6 +11,8 @@ export interface Chapter {
   publishedAt: string;
   extractionStatus: string;
   rolledBackAt: string | null;
+  hiddenAt: string | null;
+  hiddenBy: string | null;
 }
 
 interface ChapterRow {
@@ -21,6 +23,8 @@ interface ChapterRow {
   published_at: string;
   extraction_status: string;
   rolled_back_at: string | null;
+  hidden_at: string | null;
+  hidden_by: string | null;
 }
 
 function toChapter(row: ChapterRow): Chapter {
@@ -32,8 +36,13 @@ function toChapter(row: ChapterRow): Chapter {
     publishedAt: row.published_at,
     extractionStatus: row.extraction_status,
     rolledBackAt: row.rolled_back_at,
+    hiddenAt: row.hidden_at,
+    hiddenBy: row.hidden_by,
   };
 }
+
+const CHAPTER_COLUMNS =
+  'id, turn_number, turn_mode, prose, published_at, extraction_status, rolled_back_at, hidden_at, hidden_by';
 
 export interface RollbackConflict {
   entityId: string;
@@ -59,16 +68,31 @@ export class AlreadyRolledBackError extends Error {
   }
 }
 
-/** Chapters in chronological order. */
+/**
+ * Chapters in chronological order. A chapter an owner/GM has hidden (see
+ * hideChapter) is omitted for everyone else — the row and everything derived
+ * from it are untouched, only this read path filters it.
+ */
 export async function listChapters(storyId: string, userId: string): Promise<Chapter[]> {
   await assertMember(storyId, userId);
 
+  const members = await listMembers(storyId, userId);
+  const isManager = members.some(
+    (member) => member.userId === userId && (member.role === 'owner' || member.role === 'gm'),
+  );
+
   const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('chapters')
-    .select('id, turn_number, turn_mode, prose, published_at, extraction_status, rolled_back_at')
+    .select(CHAPTER_COLUMNS)
     .eq('story_id', storyId)
     .order('turn_number', { ascending: true });
+
+  if (!isManager) {
+    query = query.is('hidden_at', null);
+  }
+
+  const { data, error } = await query;
 
   if (error !== null) {
     throw new Error(`Failed to list chapters: ${error.message}`);
@@ -116,4 +140,68 @@ export async function rollbackChapter(
       .filter((row) => row.outcome === 'conflict')
       .map((row) => ({ entityId: row.entity_id, field: row.field })),
   };
+}
+
+async function getChapterStoryId(chapterId: string): Promise<string> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('chapters')
+    .select('story_id')
+    .eq('id', chapterId)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`Failed to read chapter: ${error.message}`);
+  }
+
+  if (data === null) {
+    throw new ChapterNotFoundError(chapterId);
+  }
+
+  return data.story_id;
+}
+
+/**
+ * Hide a chapter from non-manager members. Owner/GM only. Nothing about the
+ * chapter row or anything derived from it (entity_history, extracted_diffs,
+ * validation_report) changes — only what listChapters/export/share-links/
+ * search return to a non-manager.
+ */
+export async function hideChapter(chapterId: string, userId: string): Promise<Chapter> {
+  const storyId = await getChapterStoryId(chapterId);
+  await requireRole(storyId, userId, ['owner', 'gm']);
+
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('chapters')
+    .update({ hidden_at: new Date().toISOString(), hidden_by: userId })
+    .eq('id', chapterId)
+    .select(CHAPTER_COLUMNS)
+    .single();
+
+  if (error !== null) {
+    throw new Error(`Failed to hide chapter: ${error.message}`);
+  }
+
+  return toChapter(data);
+}
+
+/** Owner/GM only. Reverses hideChapter. */
+export async function unhideChapter(chapterId: string, userId: string): Promise<Chapter> {
+  const storyId = await getChapterStoryId(chapterId);
+  await requireRole(storyId, userId, ['owner', 'gm']);
+
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('chapters')
+    .update({ hidden_at: null, hidden_by: null })
+    .eq('id', chapterId)
+    .select(CHAPTER_COLUMNS)
+    .single();
+
+  if (error !== null) {
+    throw new Error(`Failed to unhide chapter: ${error.message}`);
+  }
+
+  return toChapter(data);
 }

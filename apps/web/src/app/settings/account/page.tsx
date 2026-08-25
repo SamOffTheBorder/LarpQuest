@@ -23,6 +23,21 @@ export default async function AccountSettingsPage() {
         <UsernameForm current={profile?.username ?? null} />
       </div>
 
+      <div className="rounded-lg border p-4">
+        <h2 className="font-medium">Export your data</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Download a copy of the data attached to your account: your profile, story memberships,
+          turns you submitted, reports you filed, and usage history. This is a copy of your data,
+          not a backup — it cannot be used to restore or re-import an account.
+        </p>
+        <a
+          href="/settings/account/export"
+          className="mt-2 inline-block text-sm underline underline-offset-2"
+        >
+          Download account data (JSON)
+        </a>
+      </div>
+
       <div className="rounded-lg border border-destructive/30 p-4">
         <h2 className="font-medium text-destructive">Delete account</h2>
         <p className="mt-1 text-sm text-muted-foreground">
