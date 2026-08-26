@@ -151,27 +151,29 @@ describe('gatekeeper ruling prompt wiring', () => {
 });
 
 describe('isTurningPointEligible', () => {
-  it('is eligible for exactly two distinct entities and no continuation', () => {
-    expect(isTurningPointEligible(['a', 'b'], null)).toBe(true);
-    expect(isTurningPointEligible(['a', 'b', 'a'], null)).toBe(true);
+  it('is eligible for a single submitting entity and no continuation', () => {
+    expect(isTurningPointEligible(['a'], null)).toBe(true);
+    expect(isTurningPointEligible(['a', 'a'], null)).toBe(true);
   });
 
-  it('is ineligible for one entity', () => {
-    expect(isTurningPointEligible(['a'], null)).toBe(false);
-    expect(isTurningPointEligible(['a', 'a'], null)).toBe(false);
+  it('is eligible for no submitting entity at all (freeform, untagged submission)', () => {
+    expect(isTurningPointEligible([], null)).toBe(true);
+    expect(isTurningPointEligible([null, null], null)).toBe(true);
   });
 
-  it('is ineligible for three or more distinct entities', () => {
+  it('is ineligible for two or more distinct submitting entities', () => {
+    expect(isTurningPointEligible(['a', 'b'], null)).toBe(false);
     expect(isTurningPointEligible(['a', 'b', 'c'], null)).toBe(false);
   });
 
   it('is ineligible when the turn is itself a continuation', () => {
-    expect(isTurningPointEligible(['a', 'b'], 'chapter-1')).toBe(false);
+    expect(isTurningPointEligible(['a'], 'chapter-1')).toBe(false);
+    expect(isTurningPointEligible([], 'chapter-1')).toBe(false);
   });
 
-  it('ignores null entity ids when counting', () => {
-    expect(isTurningPointEligible(['a', 'b', null], null)).toBe(true);
-    expect(isTurningPointEligible([null, null], null)).toBe(false);
+  it('ignores null entity ids when counting distinct submitters', () => {
+    expect(isTurningPointEligible(['a', null], null)).toBe(true);
+    expect(isTurningPointEligible(['a', 'b', null], null)).toBe(false);
   });
 });
 

@@ -906,7 +906,8 @@ interface TurnContext {
   validationRules: Rule[];
   proposalSubmissions: { entityId: string | null; proposal: string }[];
   /** entity_id of every submission on this turn, for the fight-chapter-split
-   * eligibility check (exactly 2 distinct entities). */
+   * eligibility check (at most one distinct submitting entity — the fight's
+   * opponent need not have submitted anything). */
   submissionEntityIds: (string | null)[];
 }
 

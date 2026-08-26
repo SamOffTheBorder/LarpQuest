@@ -704,8 +704,9 @@ describe('fight-chapter-split', () => {
   it('publishes chapter 1 with the marker stripped, then auto-generates and publishes chapter 2 with no new submission', async () => {
     const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
 
-    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
-    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    // Single submitter fighting an established character (an NPC, say) that
+    // never submits anything of its own — still eligible.
+    await createSubmission(TURN, USER, { content: 'I strike the bandit captain.', entityId: FIGHTER_A });
     await lockTurn(TURN, USER);
 
     state.narrationBehavior = 'turningPoint';
@@ -735,8 +736,7 @@ describe('fight-chapter-split', () => {
   it('copies submissions forward onto the continuation turn without re-invoking createSubmission', async () => {
     const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
 
-    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
-    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await createSubmission(TURN, USER, { content: 'I strike the bandit captain.', entityId: FIGHTER_A });
     await lockTurn(TURN, USER);
 
     state.narrationBehavior = 'turningPoint';
@@ -745,17 +745,16 @@ describe('fight-chapter-split', () => {
     const continuationTurn = [...state.turns.values()].find((t) => t.id !== TURN);
     const copiedSubmissions = state.submissions.filter((s) => s.turn_id === continuationTurn?.id);
 
-    expect(copiedSubmissions).toHaveLength(2);
-    expect(copiedSubmissions.map((s) => s.content).sort()).toEqual(['I parry.', 'I strike.']);
-    // Copies are new rows distinct from the originals, not the same rows moved.
-    expect(state.submissions.filter((s) => s.turn_id === TURN)).toHaveLength(2);
+    expect(copiedSubmissions).toHaveLength(1);
+    expect(copiedSubmissions[0]?.content).toBe('I strike the bandit captain.');
+    // The copy is a new row distinct from the original, not the same row moved.
+    expect(state.submissions.filter((s) => s.turn_id === TURN)).toHaveLength(1);
   });
 
   it('never lets a continuation split again, even if the model emits the marker anyway', async () => {
     const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
 
-    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
-    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await createSubmission(TURN, USER, { content: 'I strike the bandit captain.', entityId: FIGHTER_A });
     await lockTurn(TURN, USER);
 
     state.narrationBehavior = 'turningPointThenResolve';
@@ -772,7 +771,25 @@ describe('fight-chapter-split', () => {
     expect(chapter2?.prose).not.toContain('[TURNING_POINT]');
   });
 
-  it('group fights (3+ entities) never trigger a split, regardless of what the model emits', async () => {
+  it('two or more distinct submitting entities never trigger a split, regardless of what the model emits', async () => {
+    const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
+
+    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
+    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await lockTurn(TURN, USER);
+
+    state.narrationBehavior = 'turningPoint';
+    const result = await generateTurn(TURN, USER);
+
+    expect(turnRow(TURN)?.status).toBe('published');
+    expect(state.chapters.size).toBe(1);
+    // The mock always appends the marker in 'turningPoint' mode regardless
+    // of eligibility — generateTurn must still strip it since a 2-submitter
+    // turn's prompt never offered the option.
+    expect(result.prose).not.toContain('[TURNING_POINT]');
+  });
+
+  it('three or more distinct submitting entities never trigger a split', async () => {
     const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
 
     await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
@@ -785,9 +802,6 @@ describe('fight-chapter-split', () => {
 
     expect(turnRow(TURN)?.status).toBe('published');
     expect(state.chapters.size).toBe(1);
-    // The mock always appends the marker in 'turningPoint' mode regardless
-    // of eligibility — generateTurn must still strip it since a 3-entity
-    // turn's prompt never offered the option.
     expect(result.prose).not.toContain('[TURNING_POINT]');
   });
 
@@ -795,8 +809,7 @@ describe('fight-chapter-split', () => {
     const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await createSubmission(TURN, USER, { content: 'I strike.', entityId: FIGHTER_A });
-    await createSubmission(TURN, USER, { content: 'I parry.', entityId: FIGHTER_B });
+    await createSubmission(TURN, USER, { content: 'I strike the bandit captain.', entityId: FIGHTER_A });
     await lockTurn(TURN, USER);
 
     state.continueFightBehavior = 'notFound';
@@ -816,16 +829,16 @@ describe('fight-chapter-split', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('a single-entity turn is never eligible to split', async () => {
+  it('a submission with no entity tag at all is still eligible (freeform action against any established character)', async () => {
     const { createSubmission, lockTurn, generateTurn } = await import('@/lib/engine/turns');
 
-    await createSubmission(TURN, USER, { content: 'I strike the training dummy.', entityId: FIGHTER_A });
+    await createSubmission(TURN, USER, { content: 'I strike the bandit captain.', entityId: null });
     await lockTurn(TURN, USER);
 
     state.narrationBehavior = 'turningPoint';
     const result = await generateTurn(TURN, USER);
 
     expect(result.prose).not.toContain('[TURNING_POINT]');
-    expect(state.chapters.size).toBe(1);
+    expect(state.chapters.size).toBe(2);
   });
 });

@@ -62,12 +62,22 @@ export function extractTurningPoint(prose: string, eligible: boolean): { prose: 
 }
 
 /**
- * Whether a turn is eligible for the turning-point marker: exactly two
- * distinct entities among its submissions, and the turn is not itself a
- * continuation of an earlier fight-split chapter. A purely structural count
- * — the engine never asks whether the two entities are actually fighting;
- * that narrative judgment is left entirely to the prompt (only offered when
- * eligible) and the model's own response.
+ * Whether a turn is eligible for the turning-point marker: submissions come
+ * from at most one distinct submitting entity, and the turn is not itself a
+ * continuation of an earlier fight-split chapter.
+ *
+ * A fight's opponent does not have to be another submitting player — it can
+ * be any established character in the story (an NPC, a monster, a rival who
+ * never submits anything). Only one *side* of the fight is guaranteed to
+ * have a submission at all, so the structural check can no longer count two
+ * submitting entities; it only rules out the cases that are clearly not a
+ * 1v1 (a turn with two or more distinct submitting entities is presumed to
+ * be several player characters acting independently or against each other
+ * in ways this capability doesn't adjudicate, and a continuation turn can
+ * never split again). Whether a single-submitter turn is actually a fight,
+ * and who the opponent is, is left entirely to the model's own reading of
+ * the submission and the established entities — the prompt only offers the
+ * marker when this structural check passes.
  */
 export function isTurningPointEligible(
   submissionEntityIds: readonly (string | null)[],
@@ -78,7 +88,7 @@ export function isTurningPointEligible(
   }
 
   const distinctEntityIds = new Set(submissionEntityIds.filter((id): id is string => id !== null));
-  return distinctEntityIds.size === 2;
+  return distinctEntityIds.size <= 1;
 }
 
 /** Story-level policy inputs a turn mode's prompt may fold in. Multiplayer,
@@ -98,11 +108,13 @@ export interface TurnModeStoryContext {
    * per-turn data, not a policy-value lookup like the other two fields. */
   gatekeeperRulings?: string[];
   /** Whether this turn is eligible for the fight-chapter-split turning-point
-   * marker (fight-chapter-split capability): exactly two distinct entities
-   * among this turn's submissions, and the turn is not itself a
-   * continuation. Only `action` mode's prompt reads this; every other mode
-   * ignores it. Per-turn structural data computed by the caller, not a
-   * genre/universe judgment — the engine only counts submitting entities. */
+   * marker (fight-chapter-split capability): at most one distinct submitting
+   * entity among this turn's submissions, and the turn is not itself a
+   * continuation. The opponent, if any, does not need to have submitted
+   * anything — any established character can be the other side of the
+   * fight. Only `action` mode's prompt reads this; every other mode ignores
+   * it. Per-turn structural data computed by the caller (a submitter count),
+   * not a genre/universe judgment. */
   turningPointEligible?: boolean;
 }
 
@@ -233,14 +245,17 @@ function actionSystemPrompt(story: TurnModeStoryContext): string {
     '  could actually do.',
     ...(story.turningPointEligible === true
       ? [
-          '- This is a one-on-one fight between two combatants. If, in your',
-          '  judgment, the exchange has reached a dramatic turning point — a',
-          '  decisive hit, a shift in momentum, a moment that demands a',
-          '  cliffhanger — rather than the fight\'s actual resolution, end your',
-          `  response with the exact line \`${TURNING_POINT_MARKER}\` on its own,`,
-          '  after the prose, and nothing after it. Only do this when the fight',
-          '  is genuinely unresolved; if the fight concludes this turn, resolve',
-          `  it fully and do not include \`${TURNING_POINT_MARKER}\`.`,
+          '- If this submission resolves into a one-on-one fight against any',
+          '  single other established character — another player character,',
+          '  an NPC, or any other entity already established in this story —',
+          '  and, in your judgment, the exchange has reached a dramatic',
+          '  turning point rather than the fight\'s actual resolution, end',
+          `  your response with the exact line \`${TURNING_POINT_MARKER}\` on`,
+          '  its own, after the prose, and nothing after it. Only do this',
+          '  when the fight is genuinely a one-on-one and genuinely',
+          '  unresolved; if the fight concludes this turn, or involves more',
+          `  than two combatants, resolve it fully and do not include`,
+          `  \`${TURNING_POINT_MARKER}\`.`,
         ]
       : []),
     ...policyAndRulingLines(story),
