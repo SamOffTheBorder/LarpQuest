@@ -9,6 +9,7 @@ import { StoryNotFoundError, getStory } from '@/lib/engine/stories';
 import { getLiveTurn, listSubmissionsForTurn } from '@/lib/engine/turns';
 import { getStoryCostUsd } from '@/lib/engine/usage-summary';
 import { ArchiveButton } from '@/app/stories/[storyId]/archive-button';
+import { DeleteStoryButton } from '@/app/stories/[storyId]/delete-story-button';
 import { HideChapterButton } from '@/app/stories/[storyId]/hide-chapter-button';
 import { ModelSettings } from '@/app/stories/[storyId]/model-settings';
 import { ReportChapterButton } from '@/app/stories/[storyId]/report-chapter-button';
@@ -93,6 +94,7 @@ export default async function StoryPage({
             All stories
           </Link>
           {owner && <ArchiveButton storyId={storyId} archived={story.status === 'archived'} />}
+          {owner && <DeleteStoryButton storyId={storyId} title={story.title} />}
         </div>
       </div>
 

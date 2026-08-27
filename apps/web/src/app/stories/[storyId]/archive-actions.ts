@@ -1,9 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 import { requireUser } from '@/lib/auth';
-import { archiveStory, restoreStory } from '@/lib/engine/stories';
+import { archiveStory, deleteStory, restoreStory } from '@/lib/engine/stories';
 
 export type ArchiveActionState = {
   status: 'idle' | 'error';
@@ -28,6 +29,19 @@ export async function archiveStoryAction(storyId: string): Promise<ArchiveAction
   revalidatePath(`/stories/${storyId}`);
   revalidatePath('/stories');
   return initialIdle;
+}
+
+export async function deleteStoryAction(storyId: string): Promise<ArchiveActionState> {
+  const user = await requireUser();
+
+  try {
+    await deleteStory(storyId, user.id);
+  } catch (error) {
+    return { status: 'error', message: errorMessage(error) };
+  }
+
+  revalidatePath('/stories');
+  redirect('/stories');
 }
 
 export async function restoreStoryAction(storyId: string): Promise<ArchiveActionState> {

@@ -272,6 +272,28 @@ export async function restoreStory(storyId: string, userId: string): Promise<Sto
   return setStoryStatus(storyId, userId, 'active');
 }
 
+/**
+ * Permanently delete a story. Owner-only, irreversible.
+ *
+ * Relies on the stories table's foreign keys (chapters, entities,
+ * story_members, entity_history, etc. all reference stories.id) to cascade —
+ * see the migration that creates each dependent table for its `on delete`
+ * behavior. This does not write an entity_history row itself: there is
+ * nothing left to attach one to once the story row is gone.
+ */
+export async function deleteStory(storyId: string, userId: string): Promise<void> {
+  if (!(await isOwner(storyId, userId))) {
+    throw new StoryNotFoundError(storyId);
+  }
+
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase.from('stories').delete().eq('id', storyId);
+
+  if (error !== null) {
+    throw new Error(`Failed to delete story: ${error.message}`);
+  }
+}
+
 async function setStoryStatus(
   storyId: string,
   userId: string,
