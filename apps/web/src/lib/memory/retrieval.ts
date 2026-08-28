@@ -3,7 +3,7 @@ import 'server-only';
 import { embedText, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
 import type { ModelConfig } from '@/lib/ai/roles';
 import { toVectorLiteral } from '@/lib/memory/generate';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
@@ -44,7 +44,7 @@ export async function retrieveRelevantSummaries(
   }
 
   const { embedding } = await embedText(
-    { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget },
+    { apiKey: (await resolveStoryApiKey(args.storyId)).key, usage: args.usage, budget: args.budget },
     { modelConfig: args.modelConfig, text: args.queryText, storyId: args.storyId },
   );
 

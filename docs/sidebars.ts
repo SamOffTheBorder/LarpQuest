@@ -10,6 +10,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'architecture/core-thesis',
         'architecture/layers',
+        'architecture/story-creation',
         'architecture/turn-loop',
         'architecture/schema-system',
         'architecture/universe-versioning',

@@ -35,7 +35,7 @@ import {
 import type { ContextPolicy as StoredContextPolicy } from '@/lib/memory/schemas';
 import { retrieveRelevantSummaries } from '@/lib/memory/retrieval';
 import { moderateTurnSubmissions } from '@/lib/moderation/moderate';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { toJson } from '@/lib/supabase/json';
 
@@ -659,10 +659,14 @@ export async function generateTurn(
 
     let turningPoint = false;
 
+    // Resolved once for the whole turn: the GM's OpenRouter key (else the
+    // owner's, else the platform key) bills every attempt in this loop.
+    const { key: openRouterKey } = await resolveStoryApiKey(turn.storyId);
+
     for (;;) {
       const result = await streamNarration(
         {
-          apiKey: serverEnv().OPENROUTER_API_KEY,
+          apiKey: openRouterKey,
           usage: createUsageRecorder(turn.storyId, userId),
           budget: createBudgetGuard(turn.storyId, userId),
         },

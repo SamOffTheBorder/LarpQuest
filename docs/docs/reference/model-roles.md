@@ -14,6 +14,7 @@ Models are assigned by role, configurable per-universe and per-story, routed thr
 | Role | Requirements | Notes |
 |---|---|---|
 | **Researcher** | Web search, long context, strong synthesis | Runs once at universe creation. Expensive, worth it. |
+| **Premise** | Creative, structured output | Drafts a story premise before turn 1. Runs before any story exists, so it resolves through role defaults. |
 | **Narrator** | Creative, long output (4–8k tokens) | The prose model. Users will care most about this one. |
 | **Validator** | Fast, cheap, structured output | Narrow task. Do not use the expensive model here. |
 | **Extractor** | Structured output, reliable JSON | Emits state diffs. Schema-constrained. |
@@ -29,6 +30,7 @@ Models are assigned by role, configurable per-universe and per-story, routed thr
 The roles differ enormously in how often they run:
 
 - **Researcher** runs once per universe. Cost is amortized across an entire campaign.
+- **Premise** runs a handful of times at story creation — once per generate or re-roll — and never again.
 - **Narrator** runs once per turn, with the largest output. This dominates the bill.
 - **Summarizer** and **Embedder** run once per chapter on small inputs.
 - **Validator** runs once per turn, plus once per retry.
@@ -51,6 +53,8 @@ Model strings are stored per role in `stories.model_config`, seeded with default
 
 A missing role falls back to that role's documented default and records the fallback, rather than failing the call. A role name outside the defined table is rejected as a validation error.
 
+The story owner or GM sets these from **Model settings** on the story page. Each configurable text role (`researcher`, `narrator`, `validator`, `extractor`, `summarizer`, `gatekeeper`, `moderator`) gets a picker offering the current list of zero-priced ("free") OpenRouter models — fetched live from `GET /api/v1/models`, with a small hardcoded fallback when that fetch fails — plus a **Custom…** option for entering any model id by hand. `embedder`, `illustrator`, and `videographer` are not in this picker; they use non-chat contracts and keep their defaults.
+
 ## Routing rules
 
 1. **No call site hardcodes a model string.** Every call declares its role; the gateway resolves the model.
@@ -70,8 +74,19 @@ Only **narrator** and **extractor** are populated in Phase 1. The full role tabl
 
 - Encrypted at rest with AES-256-GCM; master key in the environment, never in the database
 - Decrypted server-side per request, never sent to the client
-- Two modes: **Owner Pays** (one key for the room) or **BYOK** (each member supplies their own)
 - Per-story and per-user spend caps with a hard stop
 - Running cost shown in the UI at all times
 
 The application refuses to start without the master key — preventing the failure mode where keys get written unencrypted because an environment variable was missing.
+
+### Bringing your own OpenRouter key
+
+A user saves their own OpenRouter key at **Settings → OpenRouter**. It is encrypted and stored as a single user-scoped row; only its last-4 fingerprint is ever shown again.
+
+When a story generates, the gateway resolves which key to bill in this order:
+
+1. The **GM** member's saved key
+2. failing that, the story **owner**'s saved key
+3. failing that, the platform `OPENROUTER_API_KEY`
+
+The source is recorded on the call. Story-less calls (universe research, canon-bible compression) always use the platform key. Costs are still written to `usage_log` and shown in per-story spend views regardless of which key was used — OpenRouter reports the cost either way; this only changes which account the spend lands on.

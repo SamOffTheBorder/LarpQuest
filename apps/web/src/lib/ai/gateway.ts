@@ -3,18 +3,27 @@ import 'server-only';
 import { z } from 'zod';
 
 import type { ModelConfig, ModelRole } from '@/lib/ai/roles';
-import { resolveModel } from '@/lib/ai/roles';
+import { isOllamaModel, resolveModel, stripOllamaPrefix } from '@/lib/ai/roles';
 import { untrustedSections } from '@/lib/ai/untrusted';
+import { serverEnv } from '@/lib/env';
 
 /**
- * The OpenRouter gateway.
+ * The model gateway: OpenRouter, plus a local Ollama server for any role
+ * whose resolved model carries the `ollama/` prefix (see `roles.ts`).
  *
- * This is the only module that talks to OpenRouter. Every call goes through
- * `callStructured`, `embedText`, or `streamNarration`. All three resolve their
- * model from a role, check the injected `BudgetGuard` before spending, and
- * report usage through the injected `UsageRecorder` — including on failure,
- * since a provider may have already billed tokens by the time an error
- * surfaces.
+ * Every call goes through `callStructured`, `embedText`, or
+ * `streamNarration`. All three resolve their model from a role, check the
+ * injected `BudgetGuard` before spending, and report usage through the
+ * injected `UsageRecorder` — including on failure, since a provider may have
+ * already billed tokens by the time an error surfaces. Ollama calls cost
+ * $0, so they always pass the budget check and record `costUsd: 0` — no
+ * special-casing needed in `budget.ts` or `spend.ts`.
+ *
+ * Both providers are reached through the same OpenAI-compatible
+ * chat-completions shape — Ollama serves one at `/v1` — so one request/parse
+ * path covers both; `deps.baseUrl`/`deps.apiKey` are what actually differ per
+ * call, resolved by the caller (see `lib/ai/api-key.ts`) from the model's
+ * prefix.
  *
  * The HTTP client is injected as `fetchImpl` so tests never hit the network.
  */
@@ -47,7 +56,16 @@ export interface BudgetGuard {
 }
 
 export interface GatewayDeps {
+  /** OpenRouter key. Unused for a call whose resolved model is `ollama/...`. */
   apiKey: string;
+  /**
+   * Base URL for a local Ollama server, e.g. `http://localhost:11434`.
+   * Only used when a role resolves to an `ollama/...` model. Optional at
+   * every call site — defaults to `serverEnv().OLLAMA_BASE_URL`, which
+   * itself defaults to Ollama's standard local port, so no caller needs to
+   * thread this through just to support local models.
+   */
+  ollamaBaseUrl?: string;
   fetchImpl?: typeof fetch;
   usage: UsageRecorder;
   budget: BudgetGuard;
@@ -58,8 +76,16 @@ interface OpenRouterUsage {
   completion_tokens?: number;
   // OpenRouter reports cost directly when usage.include is requested, rather
   // than requiring the caller to price tokens against a rate table that goes
-  // stale the moment a provider changes pricing.
+  // stale the moment a provider changes pricing. Ollama has no such field —
+  // local inference costs $0, so callers default this to 0 rather than
+  // reading it from the response.
   cost?: number;
+  // Ollama's OpenAI-compat endpoint reports token counts under these names
+  // instead of prompt_tokens/completion_tokens on at least some versions;
+  // both are read defensively so a future Ollama update that adds the
+  // OpenAI-standard names does not silently zero out usage logging.
+  prompt_eval_count?: number;
+  eval_count?: number;
 }
 
 interface OpenRouterChoice {
@@ -70,6 +96,23 @@ interface OpenRouterChoice {
 interface OpenRouterResponse {
   choices?: OpenRouterChoice[];
   usage?: OpenRouterUsage;
+}
+
+/**
+ * Normalize usage across both providers: OpenRouter's `prompt_tokens` /
+ * `completion_tokens` / `cost`, or Ollama's `prompt_eval_count` /
+ * `eval_count` with no cost field at all (local inference is free).
+ */
+function normalizeUsage(usage: OpenRouterUsage | undefined): {
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+} {
+  return {
+    promptTokens: usage?.prompt_tokens ?? usage?.prompt_eval_count ?? 0,
+    completionTokens: usage?.completion_tokens ?? usage?.eval_count ?? 0,
+    costUsd: usage?.cost ?? 0,
+  };
 }
 
 const MAX_STRUCTURED_ATTEMPTS = 2; // one shot, one retry, per Part 5.1 / ai-gateway spec
@@ -98,23 +141,54 @@ interface CallStructuredArgs<T> {
   storyId: string | null;
 }
 
+/**
+ * Resolve which server a model actually calls, and the id to send it as.
+ * OpenRouter never sees the `ollama/` prefix — Ollama doesn't know it either,
+ * it's purely this app's routing convention (see `roles.ts`).
+ */
+function resolveEndpoint(deps: GatewayDeps, model: string): { baseUrl: string; apiKey: string; wireModel: string } {
+  if (isOllamaModel(model)) {
+    const baseUrl = deps.ollamaBaseUrl ?? serverEnv().OLLAMA_BASE_URL;
+    // Ollama's OpenAI-compat endpoint does not check the bearer token, but
+    // every call still sends one (a placeholder) so the request shape is
+    // identical to an OpenRouter call and no header logic branches on
+    // provider.
+    return { baseUrl: `${baseUrl}/v1`, apiKey: 'ollama-local', wireModel: stripOllamaPrefix(model) };
+  }
+
+  return { baseUrl: OPENROUTER_BASE_URL, apiKey: deps.apiKey, wireModel: model };
+}
+
 async function postChatCompletion(
   deps: GatewayDeps,
-  args: { model: string; messages: { role: 'system' | 'user'; content: string }[]; stream?: boolean },
+  args: {
+    model: string;
+    messages: { role: 'system' | 'user'; content: string }[];
+    stream?: boolean;
+    /**
+     * Request the model constrain its output to valid JSON. Only meaningful
+     * for `callStructured`, not `streamNarration`. OpenRouter forwards this
+     * to providers that support it; Ollama honors it directly and it
+     * measurably cuts JSON-validation retries on smaller local models.
+     */
+    jsonMode?: boolean;
+  },
 ): Promise<Response> {
   const doFetch = deps.fetchImpl ?? fetch;
+  const endpoint = resolveEndpoint(deps, args.model);
 
-  return doFetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+  return doFetch(`${endpoint.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${deps.apiKey}`,
+      Authorization: `Bearer ${endpoint.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: args.model,
+      model: endpoint.wireModel,
       messages: args.messages,
       stream: args.stream ?? false,
       usage: { include: true },
+      ...(args.jsonMode === true ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
 }
@@ -185,6 +259,7 @@ export async function callStructured<T>(
         { role: 'system', content: args.systemPrompt },
         { role: 'user', content: userPrompt },
       ],
+      jsonMode: true,
     });
 
     if (!response.ok) {
@@ -198,16 +273,15 @@ export async function callStructured<T>(
         succeeded: false,
         usedFallbackModel: resolved.usedFallback,
       });
-      throw new Error(`OpenRouter request failed (${response.status}): ${body}`);
+      const providerLabel = isOllamaModel(resolved.model) ? 'Ollama' : 'OpenRouter';
+      throw new Error(`${providerLabel} request failed (${response.status}): ${body}`);
     }
 
     const payload = (await response.json()) as OpenRouterResponse;
     const content = payload.choices?.[0]?.message?.content ?? '';
     lastRaw = content;
 
-    const promptTokens = payload.usage?.prompt_tokens ?? 0;
-    const completionTokens = payload.usage?.completion_tokens ?? 0;
-    const costUsd = payload.usage?.cost ?? 0;
+    const { promptTokens, completionTokens, costUsd } = normalizeUsage(payload.usage);
 
     let parsed: T;
     try {
@@ -426,7 +500,8 @@ export async function streamNarration(
       succeeded: false,
       usedFallbackModel: resolved.usedFallback,
     });
-    throw new Error(`OpenRouter streaming request failed (${response.status}): ${body}`);
+    const providerLabel = isOllamaModel(resolved.model) ? 'Ollama' : 'OpenRouter';
+    throw new Error(`${providerLabel} streaming request failed (${response.status}): ${body}`);
   }
 
   const reader = response.body.getReader();
@@ -473,12 +548,14 @@ export async function streamNarration(
     reader.releaseLock();
   }
 
+  const normalizedUsage = normalizeUsage(usage);
+
   await deps.usage.record({
     role: 'narrator',
     model: resolved.model,
-    promptTokens: usage?.prompt_tokens ?? 0,
-    completionTokens: usage?.completion_tokens ?? 0,
-    costUsd: usage?.cost ?? 0,
+    promptTokens: normalizedUsage.promptTokens,
+    completionTokens: normalizedUsage.completionTokens,
+    costUsd: normalizedUsage.costUsd,
     succeeded: completed,
     usedFallbackModel: resolved.usedFallback,
   });

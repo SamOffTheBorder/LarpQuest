@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.17"
   }
   graphql_public: {
     Tables: {
@@ -1014,6 +1014,50 @@ export type Database = {
           },
           {
             foreignKeyName: "story_members_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_premise_drafts: {
+        Row: {
+          created_at: string
+          id: string
+          input: Json
+          notes: string | null
+          owner_id: string | null
+          premise: Json
+          status: string
+          story_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          input: Json
+          notes?: string | null
+          owner_id?: string | null
+          premise?: Json
+          status?: string
+          story_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          input?: Json
+          notes?: string | null
+          owner_id?: string | null
+          premise?: Json
+          status?: string
+          story_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_premise_drafts_story_id_fkey"
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"

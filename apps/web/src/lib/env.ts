@@ -37,7 +37,28 @@ const clientSchema = z.object({
 
 const serverSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  OPENROUTER_API_KEY: z.string().min(1),
+  /**
+   * The platform OpenRouter key. The fallback billed when a story's GM (and
+   * owner) have no personal key saved, and the only key used for story-less
+   * calls like universe research. See `lib/ai/api-key.ts` for the GM →
+   * owner → platform resolution order.
+   *
+   * Optional: a fully-local deployment (every role routed to Ollama, see
+   * OLLAMA_BASE_URL below) never needs one. `resolvePlatformApiKey` and
+   * friends throw a clear error at call time if a role actually resolves to
+   * an OpenRouter model with no key configured, rather than sending
+   * `Bearer undefined`.
+   */
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
+  /**
+   * Base URL for a local Ollama server, used by any role whose model string
+   * is prefixed `ollama/` (e.g. `ollama/qwen3.6:35b-a3b`) — see
+   * `lib/ai/roles.ts` and `lib/ai/gateway.ts`. Ollama serves an
+   * OpenAI-compatible API at `/v1` on this host. Defaults to Ollama's
+   * standard local port; only override for a remote or non-default Ollama
+   * install.
+   */
+  OLLAMA_BASE_URL: z.string().url().default('http://localhost:11434'),
   ENCRYPTION_MASTER_KEY: base64Key,
   /** Bearer token required to trigger the scheduled worker routes. */
   WORKER_SECRET: z.string().min(16, 'must be at least 16 characters'),

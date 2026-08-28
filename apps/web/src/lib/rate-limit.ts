@@ -19,6 +19,7 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 export type RateLimitedAction =
   | 'sign_in'
   | 'story_create'
+  | 'premise_generate'
   | 'universe_draft_create'
   | 'turn_generate'
   | 'invite_create'
@@ -40,6 +41,11 @@ const POLICIES: Record<RateLimitedAction, RateLimitPolicy> = {
   // an email-bombing script hammering the endpoint still gets stopped.
   sign_in: { limit: 5, windowSeconds: 300 },
   story_create: { limit: 10, windowSeconds: 3600 },
+  // A billed model call reachable before any story exists, so it cannot ride
+  // on story_create's budget or on a per-story spend cap. Generous enough to
+  // iterate on a premise properly — regeneration is the expected path, not an
+  // exception — while still bounding an abandoned-draft token burn.
+  premise_generate: { limit: 20, windowSeconds: 3600 },
   // The research pipeline is 5-15 minutes of expensive model calls per run —
   // the tightest budget here on purpose.
   universe_draft_create: { limit: 5, windowSeconds: 3600 },

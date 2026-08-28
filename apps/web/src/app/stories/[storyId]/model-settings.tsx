@@ -6,26 +6,42 @@ import {
   updateModelOverridesAction,
   type SettingsActionState,
 } from '@/app/stories/[storyId]/settings-actions';
+import { RoleModelPicker } from '@/app/stories/[storyId]/role-model-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import type { FreeModel } from '@/lib/ai/openrouter-models';
+import type { LocalModel } from '@/lib/ai/ollama-models';
+import type { ModelConfig } from '@/lib/ai/roles';
+import { CONFIGURABLE_TEXT_ROLES } from '@/lib/ai/roles';
 
 const initialState: SettingsActionState = { status: 'idle' };
 
+const ROLE_LABELS: Record<(typeof CONFIGURABLE_TEXT_ROLES)[number], string> = {
+  researcher: 'Researcher',
+  narrator: 'Narrator',
+  validator: 'Validator',
+  extractor: 'Extractor',
+  summarizer: 'Summarizer',
+  gatekeeper: 'Gatekeeper',
+  moderator: 'Moderator',
+};
+
 /**
- * Lets the story owner override which model runs the narrator/extractor
- * roles for this story — e.g. to switch to a free OpenRouter model when a
- * paid model's request exceeds the account's remaining credit. Both fields
- * are optional; blank means "use the project default."
+ * Lets the story owner or GM override which model runs each text role for this
+ * story — e.g. to run the whole story on free OpenRouter models. Every field
+ * is optional; "Project default" means the built-in default for that role.
  */
 export function ModelSettings({
   storyId,
-  narrator,
-  extractor,
+  modelConfig,
+  freeModels,
+  localModels,
 }: {
   storyId: string;
-  narrator: string | undefined;
-  extractor: string | undefined;
+  modelConfig: ModelConfig;
+  freeModels: FreeModel[];
+  /** Models installed on the local Ollama server; empty if it isn't running. */
+  localModels: LocalModel[];
 }) {
   const [open, setOpen] = useState(false);
   const boundAction = updateModelOverridesAction.bind(null, storyId);
@@ -50,30 +66,24 @@ export function ModelSettings({
       </CardHeader>
       <CardContent>
         <form action={action} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="narrator" className="text-sm font-medium">
-              Narrator model
-            </label>
-            <Input
-              id="narrator"
-              name="narrator"
-              defaultValue={narrator ?? ''}
-              placeholder="Leave blank for the project default"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="extractor" className="text-sm font-medium">
-              Extractor model
-            </label>
-            <Input
-              id="extractor"
-              name="extractor"
-              defaultValue={extractor ?? ''}
-              placeholder="Leave blank for the project default"
-            />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {CONFIGURABLE_TEXT_ROLES.map((role) => (
+              <RoleModelPicker
+                key={role}
+                role={role}
+                label={ROLE_LABELS[role]}
+                current={modelConfig[role]}
+                freeModels={freeModels}
+                localModels={localModels}
+              />
+            ))}
           </div>
           <p className="text-xs text-muted-foreground">
-            Use an OpenRouter model id, e.g. <code>nvidia/nemotron-3-super-120b-a12b:free</code>.
+            Pick a free OpenRouter model, a model running locally on your Ollama server, or choose{' '}
+            <span className="font-medium">Custom…</span> to enter any model id (e.g.{' '}
+            <code>anthropic/claude-sonnet-4.5</code>). When you are the GM, the story also uses your
+            OpenRouter key from account settings — local models need no key. A local model only
+            answers while your machine and Ollama are running.
           </p>
           {state.status === 'error' && (
             <p className="text-sm text-destructive">{state.message}</p>

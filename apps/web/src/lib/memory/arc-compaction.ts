@@ -5,7 +5,7 @@ import type { ModelConfig } from '@/lib/ai/roles';
 import { ARC_SUMMARY_SYSTEM_PROMPT, buildArcSummaryPrompt, type ArcChapterSummaryInput } from '@/lib/memory/prompts';
 import { arcSummaryResultSchema, type RetrievalBias } from '@/lib/memory/schemas';
 import { toVectorLiteral } from '@/lib/memory/generate';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
@@ -68,7 +68,11 @@ export interface GenerateArcSummaryArgs {
  * "retrieve at arc granularity for distant history."
  */
 export async function generateArcSummary(args: GenerateArcSummaryArgs): Promise<ArcSummaryOutcome> {
-  const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget };
+  const deps = {
+    apiKey: (await resolveStoryApiKey(args.storyId)).key,
+    usage: args.usage,
+    budget: args.budget,
+  };
 
   let summaryText: string;
   try {

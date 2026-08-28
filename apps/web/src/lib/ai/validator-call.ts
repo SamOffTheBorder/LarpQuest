@@ -6,7 +6,7 @@ import { callStructured, StructuredOutputError, type BudgetGuard, type UsageReco
 import type { ModelConfig } from '@/lib/ai/roles';
 import { untrustedSections, withUntrustedPreamble } from '@/lib/ai/untrusted';
 import type { Rule } from '@/lib/engine/rules/types';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 
 /**
  * The `validator`-role model call (validator-loop capability).
@@ -103,7 +103,7 @@ export async function runValidatorCall(args: RunValidatorCallArgs): Promise<Vali
 
   try {
     const { data } = await callStructured(
-      { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget },
+      { apiKey: (await resolveStoryApiKey(args.storyId)).key, usage: args.usage, budget: args.budget },
       {
         role: 'validator',
         modelConfig: args.modelConfig,

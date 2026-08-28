@@ -8,6 +8,8 @@ import { isOwner, listMembers } from '@/lib/engine/membership';
 import { StoryNotFoundError, getStory } from '@/lib/engine/stories';
 import { getLiveTurn, listSubmissionsForTurn } from '@/lib/engine/turns';
 import { getStoryCostUsd } from '@/lib/engine/usage-summary';
+import { listFreeModels } from '@/lib/ai/openrouter-models';
+import { listLocalModels } from '@/lib/ai/ollama-models';
 import { ArchiveButton } from '@/app/stories/[storyId]/archive-button';
 import { DeleteStoryButton } from '@/app/stories/[storyId]/delete-story-button';
 import { HideChapterButton } from '@/app/stories/[storyId]/hide-chapter-button';
@@ -37,13 +39,15 @@ export default async function StoryPage({
     throw error;
   }
 
-  const [chapters, liveTurn, costUsd, owner, entities, members] = await Promise.all([
+  const [chapters, liveTurn, costUsd, owner, entities, members, freeModels, localModels] = await Promise.all([
     listChapters(storyId, user.id),
     getLiveTurn(storyId, user.id),
     getStoryCostUsd(storyId, user.id),
     isOwner(storyId, user.id),
     listEntities(storyId, user.id),
     listMembers(storyId, user.id),
+    listFreeModels(),
+    listLocalModels(),
   ]);
 
   const claimedEntityIds = entities
@@ -98,11 +102,12 @@ export default async function StoryPage({
         </div>
       </div>
 
-      {owner && (
+      {isGM && (
         <ModelSettings
           storyId={storyId}
-          narrator={story.modelConfig.narrator}
-          extractor={story.modelConfig.extractor}
+          modelConfig={story.modelConfig}
+          freeModels={freeModels}
+          localModels={localModels}
         />
       )}
 

@@ -6,7 +6,7 @@ import type { ModelConfig } from '@/lib/ai/roles';
 import { untrustedSections, withUntrustedPreamble } from '@/lib/ai/untrusted';
 import { isSuppressed } from '@/lib/engine/rules/exceptions';
 import type { CanonException, RuleEntity } from '@/lib/engine/rules/types';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { toJson } from '@/lib/supabase/json';
 
@@ -133,7 +133,7 @@ async function runGatekeeperCall(args: EvaluateProposalArgs): Promise<Gatekeeper
 
   try {
     const { data } = await callStructured(
-      { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget },
+      { apiKey: (await resolveStoryApiKey(args.storyId)).key, usage: args.usage, budget: args.budget },
       {
         role: 'gatekeeper',
         modelConfig: args.modelConfig,

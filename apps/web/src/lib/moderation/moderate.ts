@@ -6,7 +6,7 @@ import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { untrustedSections, withUntrustedPreamble } from '@/lib/ai/untrusted';
 import { moderationResultSchema, type ModerationResult } from '@/lib/moderation/schemas';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
@@ -99,7 +99,7 @@ export async function moderateTurnSubmissions(
 
   try {
     const result = await callStructured(
-      { apiKey: serverEnv().OPENROUTER_API_KEY, usage, budget },
+      { apiKey: (await resolveStoryApiKey(storyId)).key, usage, budget },
       {
         role: 'moderator',
         modelConfig,

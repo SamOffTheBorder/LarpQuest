@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { defaultModelConfig, modelConfigSchema, type ModelConfig } from '@/lib/ai/roles';
 import { CONTENT_RATINGS } from '@/lib/engine/content-ratings';
-import { isMember, isOwner } from '@/lib/engine/membership';
+import { isMember, isOwner, requireRole, InsufficientRoleError } from '@/lib/engine/membership';
 import { getLatestUniverseVersion } from '@/lib/engine/universes';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { toJson } from '@/lib/supabase/json';
@@ -163,19 +163,25 @@ export async function getStory(storyId: string, userId: string): Promise<Story> 
 }
 
 /**
- * Owner-only. Replaces the story's model_config wholesale — the caller is
- * expected to have merged with the existing config first if it wants a
+ * Owner or GM only. Replaces the story's model_config wholesale — the caller
+ * is expected to have merged with the existing config first if it wants a
  * partial update, same as the underlying schema's semantics (absent roles
  * fall back to DEFAULT_MODELS, per story-lifecycle spec "Owner overrides a
- * role's model").
+ * role's model"). The GM is allowed here because they also supply the
+ * OpenRouter key the chosen models run on (see ai-gateway).
  */
 export async function updateStoryModelConfig(
   storyId: string,
   userId: string,
   modelConfig: ModelConfig,
 ): Promise<Story> {
-  if (!(await isOwner(storyId, userId))) {
-    throw new StoryNotFoundError(storyId);
+  try {
+    await requireRole(storyId, userId, ['owner', 'gm']);
+  } catch (error) {
+    if (error instanceof InsufficientRoleError) {
+      throw new StoryNotFoundError(storyId);
+    }
+    throw error;
   }
 
   const parsed = modelConfigSchema.parse(modelConfig);

@@ -3,7 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 
 import { callStructured, StructuredOutputError, type BudgetGuard, type UsageRecorder } from '@/lib/ai/gateway';
-import { serverEnv } from '@/lib/env';
+import { resolvePlatformApiKey } from '@/lib/ai/api-key';
 import type { ScopingResult } from '@/lib/research/schemas';
 import type { ResearchStage } from '@/lib/research/schemas';
 
@@ -35,12 +35,13 @@ export interface RunStageArgs<T> {
 export async function runStage<T>(args: RunStageArgs<T>): Promise<StageOutcome<T>> {
   try {
     const result = await callStructured(
-      { apiKey: serverEnv().OPENROUTER_API_KEY, usage: args.usage, budget: args.budget },
+      { apiKey: resolvePlatformApiKey().key, usage: args.usage, budget: args.budget },
       {
         role: 'researcher',
         // Research drafts are user-owned, not story-owned (design.md decision
         // 1) — there is no story model_config to resolve against yet, so
-        // every stage runs on the researcher role's documented default.
+        // every stage runs on the researcher role's documented default and
+        // bills the platform key.
         modelConfig: null,
         systemPrompt: args.systemPrompt,
         userPrompt: args.userPrompt,

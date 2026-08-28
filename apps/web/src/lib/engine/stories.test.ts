@@ -20,6 +20,11 @@ vi.mock('server-only', () => ({}));
 // now imports the AI gateway for canon-bible compression, which reads
 // serverEnv() and clientEnv at module scope — story persistence makes no
 // model call itself, so this only needs to satisfy the import.
+vi.mock('@/lib/ai/api-key', () => ({
+  resolveStoryApiKey: async () => ({ key: 'test-key', source: 'platform' }),
+  resolvePlatformApiKey: () => ({ key: 'test-key', source: 'platform' }),
+}));
+
 vi.mock('@/lib/env', () => ({
   serverEnv: () => ({ OPENROUTER_API_KEY: 'test-key' }),
   clientEnv: {},

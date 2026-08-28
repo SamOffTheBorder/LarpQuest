@@ -6,7 +6,7 @@ import { untrustedSections } from '@/lib/ai/untrusted';
 import { nullUsageRecorder } from '@/lib/ai/usage';
 import { assertMember } from '@/lib/engine/membership';
 import { resolveTurnMode } from '@/lib/engine/turn-modes';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
@@ -116,7 +116,7 @@ export async function generateBaseline(
 
   const result = await streamNarration(
     {
-      apiKey: serverEnv().OPENROUTER_API_KEY,
+      apiKey: (await resolveStoryApiKey(storyId)).key,
       // Deliberately unlogged (this comparison should not distort the story's
       // cost stats) but still capped: it is a real, user-triggerable call
       // against the same budget.

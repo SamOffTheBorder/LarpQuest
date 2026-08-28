@@ -68,6 +68,8 @@ Accumulated prose flushes to a draft row as it arrives, so a timeout leaves reco
 
 One client resolves the model from a role, validates structured output through Zod, and writes `usage_log`. Cost accounting and key decryption cannot be bypassed because no other path exists.
 
+The key that client bills is resolved per story by `resolveStoryApiKey(storyId)`: the GM member's saved OpenRouter key, else the story owner's, else the platform `OPENROUTER_API_KEY`. Call sites pass the resolved key into the gateway's injected `apiKey` dependency; they never read the environment directly. Story-less calls (universe research) use `resolvePlatformApiKey()`. Users manage their own key — and pick per-role models from OpenRouter's free-model list — from **Settings → OpenRouter** and a story's **Model settings**. See [Model Roles](/reference/model-roles) for the full picture.
+
 ## Database objects
 
 Created in Phase 1: `stories`, `story_members`, `entities`, `entity_history`, `turns`, `submissions`, `chapters`, `extraction_queue`, `api_keys`, `usage_log`.

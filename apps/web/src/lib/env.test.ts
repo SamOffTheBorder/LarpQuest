@@ -57,7 +57,7 @@ describe('server env validation', () => {
 
   it('names every problem at once rather than one at a time', async () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.WORKER_SECRET;
 
     const { serverEnv } = await import('./env');
 
@@ -67,9 +67,28 @@ describe('server env validation', () => {
     } catch (error) {
       const message = (error as Error).message;
       expect(message).toContain('SUPABASE_SERVICE_ROLE_KEY');
-      expect(message).toContain('OPENROUTER_API_KEY');
+      expect(message).toContain('WORKER_SECRET');
       expect(message).toContain('.env.example');
     }
+  });
+
+  it('accepts a missing OPENROUTER_API_KEY — a fully-local deployment never needs one', async () => {
+    delete process.env.OPENROUTER_API_KEY;
+
+    const { serverEnv } = await import('./env');
+    expect(serverEnv().OPENROUTER_API_KEY).toBeUndefined();
+  });
+
+  it('defaults OLLAMA_BASE_URL to the standard local port', async () => {
+    const { serverEnv } = await import('./env');
+    expect(serverEnv().OLLAMA_BASE_URL).toBe('http://localhost:11434');
+  });
+
+  it('accepts an explicit OLLAMA_BASE_URL override', async () => {
+    process.env.OLLAMA_BASE_URL = 'http://192.168.1.50:11434';
+
+    const { serverEnv } = await import('./env');
+    expect(serverEnv().OLLAMA_BASE_URL).toBe('http://192.168.1.50:11434');
   });
 
   it('caches after a successful parse', async () => {

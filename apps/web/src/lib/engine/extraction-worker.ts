@@ -6,7 +6,7 @@ import { createUsageRecorder } from '@/lib/ai/usage';
 import { applyDiffs, extractionResultSchema } from '@/lib/engine/diff';
 import { buildExtractorPrompt, EXTRACTOR_SYSTEM_PROMPT } from '@/lib/engine/extractor';
 import { resolveTurnMode } from '@/lib/engine/turn-modes';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { toJson } from '@/lib/supabase/json';
 
@@ -129,7 +129,7 @@ async function extractAndApply(chapterId: string, storyId: string): Promise<Extr
   try {
     extraction = await callStructured(
       {
-        apiKey: serverEnv().OPENROUTER_API_KEY,
+        apiKey: (await resolveStoryApiKey(storyId)).key,
         usage: createUsageRecorder(storyId, null),
         budget: createBudgetGuard(storyId, null),
       },

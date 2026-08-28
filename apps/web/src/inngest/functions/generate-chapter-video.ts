@@ -6,6 +6,7 @@ import { inngest } from '@/inngest/client';
 import { generateVideo } from '@/lib/ai/media-gateway';
 import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { serverEnv } from '@/lib/env';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
@@ -90,7 +91,7 @@ export const generateChapterVideo = inngest.createFunction(
 
         const result = await generateVideo(
           {
-            openRouterApiKey: serverEnv().OPENROUTER_API_KEY,
+            openRouterApiKey: (await resolveStoryApiKey(row.story_id)).key,
             videoProviderApiKey: serverEnv().VIDEO_PROVIDER_API_KEY ?? '',
             ...(baseUrl !== undefined ? { videoProviderBaseUrl: baseUrl } : {}),
             usage: createUsageRecorder(row.story_id, null),

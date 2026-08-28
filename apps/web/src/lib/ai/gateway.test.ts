@@ -1,9 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { callStructured, embedText, streamNarration, StructuredOutputError, type UsageRecorder } from './gateway';
 import { SpendCapExceededError } from '@/lib/ai/budget';
 import { allowAllBudget, denyingBudget } from '@/lib/ai/budget.test-helpers';
+
+// gateway.ts reads serverEnv() for the Ollama base-url fallback, which
+// eagerly parses process.env at import time — set the full env before the
+// dynamic import below pulls env.ts in transitively, same as api-key.test.ts.
+process.env.ENCRYPTION_MASTER_KEY ??= Buffer.alloc(32).toString('base64');
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
+process.env.OPENROUTER_API_KEY ??= 'platform-key';
+process.env.NEXT_PUBLIC_SITE_URL ??= 'http://localhost:3000';
+process.env.NEXT_PUBLIC_SUPABASE_URL ??= 'https://test.supabase.co';
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= 'test-anon-key';
+process.env.WORKER_SECRET ??= 'test-worker-secret-value';
+
+const { callStructured, embedText, streamNarration, StructuredOutputError } = await import('./gateway');
+type UsageRecorder = import('./gateway').UsageRecorder;
 
 function recorder(): UsageRecorder & { calls: Parameters<UsageRecorder['record']>[0][] } {
   const calls: Parameters<UsageRecorder['record']>[0][] = [];
@@ -238,6 +251,64 @@ describe('callStructured', () => {
 
     const body = JSON.parse((fetchImpl.mock.calls[0] as [string, RequestInit])[1].body as string);
     expect(body.model).toBe('model/b');
+  });
+
+  it('routes an ollama/-prefixed model to the local server, stripping the prefix and requesting JSON mode', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        choices: [{ message: { content: '{"field":"status","to":"injured"}' } }],
+        usage: { prompt_eval_count: 42, eval_count: 8 },
+      }),
+    );
+    const usage = recorder();
+
+    const result = await callStructured(
+      { apiKey: 'k', ollamaBaseUrl: 'http://localhost:11434', fetchImpl, usage, budget: allowAllBudget },
+      {
+        role: 'narrator',
+        modelConfig: { narrator: 'ollama/qwen3.6:35b-a3b' },
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        schema: diffSchema,
+        storyId: null,
+      },
+    );
+
+    expect(result.resolvedModel).toBe('ollama/qwen3.6:35b-a3b');
+
+    const [requestUrl, requestInit] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(requestUrl).toBe('http://localhost:11434/v1/chat/completions');
+    const body = JSON.parse(requestInit.body as string);
+    // Ollama doesn't know the ollama/ routing prefix — only OpenRouter slugs
+    // carry a namespace it understands.
+    expect(body.model).toBe('qwen3.6:35b-a3b');
+    expect(body.response_format).toEqual({ type: 'json_object' });
+
+    // Ollama's OpenAI-compat usage field names, normalized to the same shape
+    // as OpenRouter's, with cost defaulted to 0 (local inference is free).
+    expect(usage.calls[0]).toMatchObject({ promptTokens: 42, completionTokens: 8, costUsd: 0 });
+  });
+
+  it('falls back to serverEnv OLLAMA_BASE_URL when none is injected', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({ choices: [{ message: { content: '{"field":"status","to":"injured"}' } }] }),
+    );
+
+    await callStructured(
+      { apiKey: 'k', fetchImpl, usage: recorder(), budget: allowAllBudget },
+      {
+        role: 'narrator',
+        modelConfig: { narrator: 'ollama/llama3.1:8b' },
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        schema: diffSchema,
+        storyId: null,
+      },
+    );
+
+    const [requestUrl] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    // No OLLAMA_BASE_URL was set above, so env.ts's schema default applies.
+    expect(requestUrl).toBe('http://localhost:11434/v1/chat/completions');
   });
 });
 

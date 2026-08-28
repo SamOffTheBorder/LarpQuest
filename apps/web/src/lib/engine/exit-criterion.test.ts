@@ -22,6 +22,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+vi.mock('@/lib/ai/api-key', () => ({
+  resolveStoryApiKey: async () => ({ key: 'test-key', source: 'platform' }),
+  resolvePlatformApiKey: () => ({ key: 'test-key', source: 'platform' }),
+}));
+
 vi.mock('@/lib/env', () => ({
   serverEnv: () => ({ OPENROUTER_API_KEY: 'test-key' }),
   clientEnv: {},

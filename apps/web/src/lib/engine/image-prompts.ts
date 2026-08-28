@@ -7,7 +7,7 @@ import { createBudgetGuard } from '@/lib/ai/spend';
 import { createUsageRecorder } from '@/lib/ai/usage';
 import { untrustedSections, withUntrustedPreamble } from '@/lib/ai/untrusted';
 import { queueChapterIllustration } from '@/lib/engine/chapter-illustration';
-import { serverEnv } from '@/lib/env';
+import { resolveStoryApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { toJson } from '@/lib/supabase/json';
 
@@ -206,7 +206,7 @@ async function generatePrompts(chapterId: string, storyId: string): Promise<stri
   try {
     const result = await callStructured(
       {
-        apiKey: serverEnv().OPENROUTER_API_KEY,
+        apiKey: (await resolveStoryApiKey(storyId)).key,
         usage: createUsageRecorder(storyId, null),
         budget: createBudgetGuard(storyId, null),
       },

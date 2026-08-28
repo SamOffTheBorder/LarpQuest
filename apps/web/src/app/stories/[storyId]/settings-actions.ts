@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { CONFIGURABLE_TEXT_ROLES } from '@/lib/ai/roles';
 import { requireUser } from '@/lib/auth';
 import { getStory, updateStoryModelConfig } from '@/lib/engine/stories';
 
@@ -13,10 +14,11 @@ export type SettingsActionState = {
 const initialIdle: SettingsActionState = { status: 'idle' };
 
 /**
- * Updates only the narrator and extractor model overrides — the two roles
- * Phase 1 actually calls. Reads the story's current model_config first so
- * other roles' overrides (none exist yet, but the schema allows them) are
- * preserved rather than dropped by a wholesale replace.
+ * Updates the per-role model overrides for every configurable text role.
+ * Reads the story's current model_config first, then for each role sets the
+ * trimmed value or deletes the entry when blank, so a role left on "Project
+ * default" falls back to DEFAULT_MODELS. The whole map is re-validated through
+ * `modelConfigSchema` inside `updateStoryModelConfig`.
  */
 export async function updateModelOverridesAction(
   storyId: string,
@@ -25,24 +27,18 @@ export async function updateModelOverridesAction(
 ): Promise<SettingsActionState> {
   const user = await requireUser();
 
-  const narrator = formData.get('narrator');
-  const extractor = formData.get('extractor');
-
   try {
     const story = await getStory(storyId, user.id);
 
     const nextConfig = { ...story.modelConfig };
 
-    if (typeof narrator === 'string' && narrator.trim().length > 0) {
-      nextConfig.narrator = narrator.trim();
-    } else {
-      delete nextConfig.narrator;
-    }
-
-    if (typeof extractor === 'string' && extractor.trim().length > 0) {
-      nextConfig.extractor = extractor.trim();
-    } else {
-      delete nextConfig.extractor;
+    for (const role of CONFIGURABLE_TEXT_ROLES) {
+      const value = formData.get(role);
+      if (typeof value === 'string' && value.trim().length > 0) {
+        nextConfig[role] = value.trim();
+      } else {
+        delete nextConfig[role];
+      }
     }
 
     await updateStoryModelConfig(storyId, user.id, nextConfig);

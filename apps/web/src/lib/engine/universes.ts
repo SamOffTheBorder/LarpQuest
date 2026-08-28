@@ -9,7 +9,7 @@ import { nullUsageRecorder } from '@/lib/ai/usage';
 import { entitySchemaSchema, type EntitySchema } from '@/lib/engine/schema';
 import { resolveProgressionModel } from '@/lib/engine/progression-models';
 import { contextPolicySchema, DEFAULT_CONTEXT_POLICY, type ContextPolicy } from '@/lib/memory/schemas';
-import { serverEnv } from '@/lib/env';
+import { resolvePlatformApiKey } from '@/lib/ai/api-key';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { toJson } from '@/lib/supabase/json';
 
@@ -133,7 +133,9 @@ async function compressCanonBible(
     return { summary: null, rulesOnly: null };
   }
 
-  const deps = { apiKey: serverEnv().OPENROUTER_API_KEY, usage, budget };
+  // Universe compression has no story context, so it always bills the
+  // platform key.
+  const deps = { apiKey: resolvePlatformApiKey().key, usage, budget };
   // The canon bible is research output derived from user-supplied source
   // material, so it is untrusted at one remove.
   const canonText = untrustedSections([

@@ -4,8 +4,10 @@ import {
   DEFAULT_MODELS,
   MODEL_ROLES,
   defaultModelConfig,
+  isOllamaModel,
   modelConfigSchema,
   resolveModel,
+  stripOllamaPrefix,
 } from './roles';
 
 describe('model role resolution', () => {
@@ -59,5 +61,23 @@ describe('model role resolution', () => {
   it('rejects a role outside the defined table', () => {
     const result = modelConfigSchema.safeParse({ novelist: 'some/model' });
     expect(result.success).toBe(false);
+  });
+
+  it('resolves an ollama/-prefixed override like any other model string', () => {
+    const resolved = resolveModel('narrator', { narrator: 'ollama/qwen3.6:35b-a3b' });
+
+    expect(resolved.model).toBe('ollama/qwen3.6:35b-a3b');
+    expect(resolved.usedFallback).toBe(false);
+  });
+});
+
+describe('ollama routing prefix', () => {
+  it('recognizes an ollama/-prefixed model', () => {
+    expect(isOllamaModel('ollama/qwen3.6:35b-a3b')).toBe(true);
+    expect(isOllamaModel('anthropic/claude-sonnet-4.5')).toBe(false);
+  });
+
+  it('strips the prefix to the id Ollama itself expects', () => {
+    expect(stripOllamaPrefix('ollama/qwen3.6:35b-a3b')).toBe('qwen3.6:35b-a3b');
   });
 });

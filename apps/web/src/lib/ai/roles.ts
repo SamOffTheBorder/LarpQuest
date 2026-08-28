@@ -13,6 +13,7 @@ import { z } from 'zod';
  */
 export const MODEL_ROLES = [
   'researcher',
+  'premise',
   'narrator',
   'validator',
   'extractor',
@@ -27,6 +28,24 @@ export const MODEL_ROLES = [
 export type ModelRole = (typeof MODEL_ROLES)[number];
 
 export const modelRoleSchema = z.enum(MODEL_ROLES);
+
+/**
+ * The roles a GM can pick a model for from story settings. Excludes
+ * `embedder`, `illustrator`, and `videographer`: those do not speak the
+ * chat-completions contract the free-model picker assumes, and their defaults
+ * are managed separately (see media-gateway.ts).
+ */
+export const CONFIGURABLE_TEXT_ROLES = [
+  'researcher',
+  'narrator',
+  'validator',
+  'extractor',
+  'summarizer',
+  'gatekeeper',
+  'moderator',
+] as const satisfies readonly ModelRole[];
+
+export type ConfigurableTextRole = (typeof CONFIGURABLE_TEXT_ROLES)[number];
 
 /**
  * Per-role defaults, used when a story's `model_config` has no entry for a
@@ -51,6 +70,13 @@ export const modelRoleSchema = z.enum(MODEL_ROLES);
  */
 export const DEFAULT_MODELS: Record<ModelRole, string> = {
   researcher: 'anthropic/claude-opus-4.1',
+  // Premise drafting is creative world-building, so it defaults to the same
+  // tier as narration. It is a separate role rather than a reuse of
+  // `narrator` because the two have genuinely different shapes — structured
+  // JSON world-building versus streamed prose — and a GM iterating on
+  // premises may well want a cheaper model there while keeping an expensive
+  // narrator.
+  premise: 'anthropic/claude-sonnet-4.5',
   narrator: 'anthropic/claude-sonnet-4.5',
   validator: 'anthropic/claude-haiku-4.5',
   extractor: 'anthropic/claude-haiku-4.5',
@@ -113,4 +139,33 @@ export function resolveModel(role: ModelRole, config: ModelConfig | null | undef
   }
 
   return { role, model: DEFAULT_MODELS[role], usedFallback: true };
+}
+
+/**
+ * Local-model routing convention.
+ *
+ * A resolved model string is normally an OpenRouter slug (`anthropic/...`,
+ * `openai/...`) — OpenRouter picks the upstream provider server-side. There
+ * is no OpenRouter route to a machine's own Ollama install, so a model meant
+ * to run locally is written the same way — `<namespace>/<id>` — with the
+ * reserved namespace `ollama`, e.g. `ollama/qwen3.6:35b-a3b`. The gateway
+ * checks for this prefix and, when present, calls the local Ollama server's
+ * OpenAI-compatible endpoint instead of OpenRouter, sending the id with the
+ * prefix stripped (Ollama does not know the `ollama/` slug, only its own
+ * model names).
+ *
+ * Keeping this as a string-prefix convention rather than a separate
+ * `provider` field on `ModelConfig` means no schema change and no migration:
+ * `model_config` is already free-form per-role strings, and every existing
+ * caller of `resolveModel` needs no changes at all.
+ */
+export const OLLAMA_PREFIX = 'ollama/';
+
+export function isOllamaModel(model: string): boolean {
+  return model.startsWith(OLLAMA_PREFIX);
+}
+
+/** Strip the `ollama/` routing prefix, yielding the id Ollama itself expects. */
+export function stripOllamaPrefix(model: string): string {
+  return model.slice(OLLAMA_PREFIX.length);
 }
