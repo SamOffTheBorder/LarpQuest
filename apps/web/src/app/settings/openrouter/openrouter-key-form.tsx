@@ -3,13 +3,14 @@
 import { useActionState } from 'react';
 
 import {
-  openRouterKeyIdleState,
   removeOpenRouterKeyAction,
   saveOpenRouterKeyAction,
   type OpenRouterKeyActionState,
 } from '@/app/settings/openrouter/openrouter-key-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+
+const openRouterKeyIdleState: OpenRouterKeyActionState = { status: 'idle' };
 
 /**
  * Save / replace / remove the signed-in user's OpenRouter key. The plaintext

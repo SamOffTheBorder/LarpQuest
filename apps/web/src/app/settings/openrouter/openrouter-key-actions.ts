@@ -10,8 +10,6 @@ export type OpenRouterKeyActionState = {
   message?: string;
 };
 
-const idle: OpenRouterKeyActionState = { status: 'idle' };
-
 export async function saveOpenRouterKeyAction(
   _prevState: OpenRouterKeyActionState,
   formData: FormData,
@@ -54,5 +52,3 @@ export async function removeOpenRouterKeyAction(
   revalidatePath('/settings/openrouter');
   return { status: 'removed', message: 'Key removed.' };
 }
-
-export { idle as openRouterKeyIdleState };
