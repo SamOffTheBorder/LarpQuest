@@ -1,0 +1,59 @@
+name: Scheduled workers
+
+# Vercel's Hobby plan caps cron jobs at once per day, which is far too slow for
+# an active story: state extraction and chapter summaries would lag a day
+# behind every chapter published, so each turn would be assembled from stale
+# entity state. `apps/web/vercel.json` keeps its daily crons as a safety net
+# (they cost nothing and drain the queue if this workflow is ever disabled);
+# this workflow is the real scheduler, and GitHub Actions imposes no frequency
+# cap on a private or public repo's cron.
+#
+# Each route drains its queue per invocation (see lib/worker/drain.ts), so a
+# 15-minute cadence keeps up with a busy session without minute-level polling.
+#
+# Setup, one time:
+#   gh secret set WORKER_BASE_URL --body "https://<your-app>.vercel.app"
+#   gh secret set WORKER_SECRET   --body "<same value as the Vercel env var>"
+#
+# Note GitHub's scheduler is best-effort and can be delayed under load, and it
+# disables cron on a repo with no activity for 60 days. Neither matters here:
+# nothing is lost by a late drain, the queue rows persist, and the daily Vercel
+# crons remain as a floor.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  # So a stalled queue can be drained on demand without waiting for the tick.
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-workers
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    name: Drain worker queues
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extraction queue
+        run: |
+          curl --silent --show-error --fail-with-body --max-time 120 \
+            -X POST "${{ secrets.WORKER_BASE_URL }}/api/worker/extract" \
+            -H "Authorization: Bearer ${{ secrets.WORKER_SECRET }}"
+
+      - name: Memory queue
+        # Runs even if extraction failed: the two queues are independent, and a
+        # broken extractor should not also stop chapter summaries.
+        if: always()
+        run: |
+          curl --silent --show-error --fail-with-body --max-time 120 \
+            -X POST "${{ secrets.WORKER_BASE_URL }}/api/worker/memory" \
+            -H "Authorization: Bearer ${{ secrets.WORKER_SECRET }}"
+
+      - name: Turn deadlines
+        if: always()
+        run: |
+          curl --silent --show-error --fail-with-body --max-time 120 \
+            -X POST "${{ secrets.WORKER_BASE_URL }}/api/worker/deadlines" \
+            -H "Authorization: Bearer ${{ secrets.WORKER_SECRET }}"

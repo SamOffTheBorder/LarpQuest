@@ -760,3 +760,51 @@ input (`fenceNonce`), with the turn loop passing a fresh one per generation.
 
 *Still open:* B3.5 (security review, RLS/advisor checks against the linked project) is the
 remaining Part 6 item before Tier B.
+
+### 2026-08-29 — worker drain loop and a real scheduler
+
+**A1.1/A1.2 revisited.** `ea700e1` slowed the Vercel crons to daily for Hobby-plan
+compliance and noted "revisit if this turns out too slow for an active story." It is,
+and the reason is compounding: each worker route processed exactly **one** queue row
+per invocation, so a daily cron drained one extraction and one memory job per 24 hours
+across the entire deployment. Chapters still published immediately (CLAUDE.md #2 was
+never at risk), but entity state never updated between turns — so the narrator assembled
+every turn from stale state, and memory retrieval had nothing to retrieve. That is the
+difference between an engine that works and one you can actually tell a story with.
+
+Two changes, both needed:
+
+**`lib/worker/drain.ts`** wraps the existing single-row runners in a loop that drains
+until the queue is empty, 25 jobs are done, or 45s elapse — whichever comes first,
+reported in `stoppedBecause`. The single-row claim was kept deliberately: it is atomic
+and isolates a failure to one row. Only the *invocation* batches. A job that throws
+stops the drain rather than being swallowed, because the runner has already recorded
+the failure on its queue row, and continuing would risk burning the whole budget looping
+over a systemic failure (a bad key, a dead provider). Both routes declare
+`maxDuration = 60` so the final job has room to finish inside the serverless ceiling.
+
+**`.github/workflows/workers.yml`** becomes the real scheduler: POSTs to all three routes
+every 15 minutes with `WORKER_SECRET`, no plan-imposed frequency cap, free. `vercel.json`
+keeps its daily crons as a floor — they cost nothing and still drain the queue if the
+workflow is ever disabled (GitHub turns cron off after 60 days of repo inactivity). Each
+route runs in its own `if: always()` step so a broken extractor does not also stall
+chapter summaries, and `workflow_dispatch` allows draining on demand.
+
+Worth recording *why* the split rather than just raising the Vercel cron: on Hobby, the
+dashboard refuses to create a deployment at all while a sub-daily cron entry exists in
+`vercel.json`. The constraint blocks shipping, not merely scheduling — so `vercel.json`
+must stay daily regardless of what drives the real cadence.
+
+656 tests pass (+7), typecheck, `apps/web` build, and the docs build all clean.
+
+*Requires one-time setup before it does anything:*
+
+```bash
+gh secret set WORKER_BASE_URL --body "https://<your-app>.vercel.app"
+gh secret set WORKER_SECRET   --body "<same value as the Vercel env var>"
+```
+
+*Still open for a friends campaign:* production SMTP (A4.5) — magic links are the only
+way in and Supabase's built-in mailer is rate-limited; the three manual end-to-end passes
+(`gm-openrouter-keys` 7.3, `story-premise-generator` 10.3, and the deployed turn-loop
+verification in `docs/architecture/scheduling.md`); and a backup-restore drill (A3.4).
