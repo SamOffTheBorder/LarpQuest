@@ -70,7 +70,13 @@ export const metadata: Metadata = {
   description: "Collaborative, AI-narrated storytelling across any universe.",
 };
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
+// Typed explicitly rather than with Next's generated `LayoutProps<"/">`
+// global: that type lives in `.next/types`, which exists only after a build,
+// so depending on it makes `tsc --noEmit` pass locally (where a build has run)
+// and fail in CI, where typecheck runs first against a clean checkout.
+export default async function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   const cookieStore = await cookies();
   const cookiePrefs = parseAppearanceCookie(cookieStore.get(APPEARANCE_COOKIE_NAME)?.value);
   const dbPrefs = await getServerAppearancePrefs();
